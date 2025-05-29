@@ -2,12 +2,25 @@
 #include <libusb-1.0/libusb.h>
 #include <glib.h>
 
+enum CommandID {
+    EXIT=0,
+    FILE_RANGE=1,
+    FILE_RANGE_PADDED=2
+};
+
 const unsigned char *MAGIC = "TUL0";
 
 int transfer(libusb_device_handle *dev, uint8_t endpoint, unsigned char *data, int data_length, int timeout) {
     int transferred;
     libusb_bulk_transfer(dev, endpoint, data, data_length, &transferred, timeout);
     return transferred;
+}
+
+char* to_string(unsigned char *bytes, int length) {
+    char buff[length +1];
+    memcpy(&buff, bytes, length);
+    buff[length +1] = '\0';
+    return buff;
 }
 
 libusb_device* find_switch(libusb_context *ctx) {
@@ -21,7 +34,6 @@ libusb_device* find_switch(libusb_context *ctx) {
         int res = libusb_get_device_descriptor(dev, &desc);
         if (res == 0) {
             if (desc.idVendor == 0x057E && desc.idProduct == 0x3000) {
-                g_info("INFO: Found switch");
                 _switch = dev;
                 break;
             }
@@ -49,11 +61,9 @@ void get_endpoints(libusb_device *_switch, uint8_t *in_ep, uint8_t *out_ep, uint
 
                     for (int k = 0; k < altsetting->bNumEndpoints; k++) {
                         const struct libusb_endpoint_descriptor *endpoint = &altsetting->endpoint[k];
-                        if (endpoint->bEndpointAddress == LIBUSB_ENDPOINT_IN) {
-                            g_info("Found IN endpoint");
+                        if (endpoint->bEndpointAddress == 0x81) {
                             *in_ep = endpoint->bEndpointAddress;
                         } else {
-                            g_info("Found OUT endpoint");
                             *out_ep = endpoint->bEndpointAddress;
                         }
                     }
@@ -87,23 +97,20 @@ int validate_roms(char *roms[], int length, char *result[], int *roms_length) {
     return valid_count;
 }
 
-// Envía el header y los nombres de los archivos válidos
 void send_roms(libusb_device_handle *handle, uint8_t out_ep, char *roms[], int length) {
     char *roms_list[length];
     int roms_len = 0;
     int valid_count = validate_roms(roms, length, roms_list, &roms_len);
 
-    g_debug("roms_len: %d", roms_len);
-
-    // Enviar header (ejemplo: MAGIC, tamaño, padding)
+    // Send header
     unsigned char bytes_roms_length[sizeof(int)];
     unsigned char padding[8] = {0};
     memcpy(bytes_roms_length, &roms_len, sizeof(int));
-    transfer(handle, out_ep, (unsigned char *)MAGIC, strlen((const char *)MAGIC), 1000);
+    transfer(handle, out_ep, MAGIC, strlen((const char *)MAGIC), 1000);
     transfer(handle, out_ep, bytes_roms_length, sizeof(int), 1000);
     transfer(handle, out_ep, padding, sizeof(padding), 1000);
 
-    // Enviar los nombres de los archivos uno por uno
+    // Send roms names
     for (int i = 0; i < valid_count; i++) {
         transfer(handle, out_ep, (unsigned char *)roms_list[i], strlen(roms_list[i]), 1000);
         free(roms_list[i]);
@@ -135,13 +142,37 @@ void poll_commands(libusb_device *_switch, uint8_t in_ep, uint8_t out_ep, int in
     while (1) {
         r = libusb_bulk_transfer(_switch_handle, in_ep, data, 0x20, &length, 0);
         if (r == 0) {
-            printf("INFO: Read %d bytes", length);
-            for (int i=0; i<length; i++) {
-                printf("%02x ", data[i]);
+            uint32_t cmd_id;
+            uint8_t cmd_type;
+            uint64_t data_size;
+            char _magic[5];
+            memcpy(_magic, data, 4);
+            _magic[5] = '\0';
+
+            g_info("Read %d bytes", length);
+
+            if (strcmp(_magic, "TUC0") != 0) {
+                g_warning("Invalid magic: %s", _magic);
+                continue;
             }
-            printf("\n");
-            break;
-        } else {};
+            
+            cmd_type = data[4];
+            memcpy(&cmd_id, &data[8], sizeof(uint32_t));
+            memcpy(&data_size, &data[12], sizeof(uint64_t));
+            g_debug("cmd_type: %u, cmd_id: %u, data_size: %lu", cmd_type, cmd_id, data_size);
+
+            if (cmd_id == EXIT) {
+                g_info("Exit recieved");
+                break;
+            } else if (cmd_id == FILE_RANGE || cmd_id == FILE_RANGE_PADDED) {
+                // TODO
+            } else {
+                g_warning("Unknown command id");
+            }
+            
+        } else {
+            g_warning("Error while trying to read from usb: %s", libusb_error_name(r));
+        };
     }
 
     libusb_release_interface(_switch_handle, interfaceNum);
