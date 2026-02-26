@@ -9,7 +9,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut ctx = usb::protocol::SwitchProtocol::new()?;
 
     ctx.find_switch()?;
-    ctx.send_roms(vec!["/home/axel/undertale.nsp".to_string()]);
+    ctx.send_roms(vec!["/home/axel/undertale.nsp".to_string()])?;
     ctx.poll_commands()?;
 
     Ok(())

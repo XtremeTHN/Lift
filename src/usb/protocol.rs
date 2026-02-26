@@ -171,18 +171,20 @@ impl SwitchProtocol {
         Ok(())
     }
 
-    fn send_list_header(&self, length: u32) {
+    fn send_list_header(&self, length: u32) -> Result<(), ProtocolError> {
         info!("Sending rom list with length of {}", length);
-        self.write("TUL0".as_bytes()).expect("magic");
-        self.write(&length.to_le_bytes()).expect("length");
-        self.write(&vec![0u8; 0x8]).expect("padding"); // padding
+        self.write("TUL0".as_bytes())?;
+        self.write(&length.to_le_bytes())?;
+        self.write(&vec![0u8; 0x8])?; // padding
+
+        Ok(())
     }
 
     /// Sends the roms that will be transferred
     /// ```
     /// protocol.send_roms(vec!["ori.xci", "undertale.nsp"]);
     /// ```
-    pub fn send_roms(&self, roms: Vec<String>) {
+    pub fn send_roms(&self, roms: Vec<String>) -> Result<(), ProtocolError> {
         let mut new_vec: Vec<String> = Vec::new();
         let mut length = 0;
 
@@ -191,11 +193,13 @@ impl SwitchProtocol {
             length += file.len() + 1;
         }
 
-        self.send_list_header(length.try_into().unwrap());
+        self.send_list_header(length.try_into().unwrap())?;
 
         for file in new_vec {
-            self.write(file.as_bytes()).expect(file.as_str());
+            self.write(file.as_bytes())?;
         }
+
+        Ok(())
     }
 
     fn recieve_file(&self) -> Result<FileHeader, ProtocolError> {
