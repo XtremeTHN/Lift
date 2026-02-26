@@ -51,6 +51,17 @@ impl TryFrom<u32> for ProtocolCommand {
     }
 }
 
+/// Protocol for transfering nintendo switch roms (.nsp, .xci) through usb
+/// Only tested for AwooInstaller
+///
+/// Before polling commands, you must send the roms that will be transfered
+///
+/// ```
+/// let mut protocol = SwitchProtocol::new();
+/// protocol.find_switch();
+/// protocol.send_roms(vec!["./ori.xci"]);
+/// protocol.poll_commands();
+/// ```
 pub struct SwitchProtocol {
     pub ctx: Context,
     pub switch: Option<Device<Context>>,
@@ -130,6 +141,7 @@ impl SwitchProtocol {
         Ok(())
     }
 
+    /// Finds the usb device where the switch is connected and sets the switch and handle fields of Self
     pub fn find_switch(&mut self) -> Result<(), ProtocolError> {
         let devs = self.ctx.devices()?;
 
@@ -166,6 +178,10 @@ impl SwitchProtocol {
         self.write(&vec![0u8; 0x8]).expect("padding"); // padding
     }
 
+    /// Sends the roms that will be transferred
+    /// ```
+    /// protocol.send_roms(vec!["ori.xci", "undertale.nsp"]);
+    /// ```
     pub fn send_roms(&self, roms: Vec<String>) {
         let mut new_vec: Vec<String> = Vec::new();
         let mut length = 0;
@@ -263,6 +279,9 @@ impl SwitchProtocol {
         Ok(())
     }
 
+    /// Handles the commands sent by the switch
+    /// Call find_switch() before using this function
+    /// Send the roms before using this function
     pub fn poll_commands(&self) -> Result<(), ProtocolError> {
         loop {
             let mut header = vec![0u8; 0x20];
