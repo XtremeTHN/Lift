@@ -4,7 +4,6 @@ use rusb::{ConfigDescriptor, Context, Device, DeviceHandle, UsbContext};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::string::FromUtf8Error;
-use std::thread::sleep;
 use std::time::Duration;
 
 #[derive(thiserror::Error, Debug)]
