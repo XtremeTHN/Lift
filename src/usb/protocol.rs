@@ -77,6 +77,8 @@ struct FileHeader {
     name: String,
 }
 
+type ProtocolResult = Result<(), ProtocolError>;
+
 const BUFFER_SEGMENT_DATA_SIZE: u64 = 0x100000;
 const PADDING_SIZE: u64 = 0x1000;
 
@@ -94,7 +96,7 @@ impl SwitchProtocol {
         })
     }
 
-    fn find_endpoints(&mut self, conf_desc: ConfigDescriptor) -> Result<(), ProtocolError> {
+    fn find_endpoints(&mut self, conf_desc: ConfigDescriptor) -> ProtocolResult {
         for interface in conf_desc.interfaces() {
             for altsetting in interface.descriptors() {
                 for endpoint in altsetting.endpoint_descriptors() {
@@ -122,18 +124,18 @@ impl SwitchProtocol {
         Ok(())
     }
 
-    fn write(&self, buf: &[u8]) -> Result<(), ProtocolError> {
+    fn write(&self, buf: &[u8]) -> ProtocolResult {
         let handle = self.handle.as_ref().unwrap();
         handle.write_bulk(self.out_endpoint.unwrap(), buf, Duration::from_secs(1))?;
 
         Ok(())
     }
 
-    fn read(&self, buf: &mut [u8]) -> Result<(), ProtocolError> {
+    fn read(&self, buf: &mut [u8]) -> ProtocolResult {
         self.read_with_timeout(buf, Duration::from_secs(1))
     }
 
-    fn read_with_timeout(&self, buf: &mut [u8], timeout: Duration) -> Result<(), ProtocolError> {
+    fn read_with_timeout(&self, buf: &mut [u8], timeout: Duration) -> ProtocolResult {
         let handle = self.handle.as_ref().unwrap();
         handle.read_bulk(self.in_endpoint.unwrap(), buf, timeout)?;
 
@@ -141,7 +143,7 @@ impl SwitchProtocol {
     }
 
     /// Finds the usb device where the switch is connected and sets the switch and handle fields of Self
-    pub fn find_switch(&mut self) -> Result<(), ProtocolError> {
+    pub fn find_switch(&mut self) -> ProtocolResult {
         let devs = self.ctx.devices()?;
 
         let mut switch: Option<Device<Context>> = None;
@@ -170,7 +172,7 @@ impl SwitchProtocol {
         Ok(())
     }
 
-    fn send_list_header(&self, length: u32) -> Result<(), ProtocolError> {
+    fn send_list_header(&self, length: u32) -> ProtocolResult {
         info!("Sending rom list with length of {}", length);
         self.write("TUL0".as_bytes())?;
         self.write(&length.to_le_bytes())?;
@@ -183,7 +185,7 @@ impl SwitchProtocol {
     /// ```
     /// protocol.send_roms(vec!["ori.xci", "undertale.nsp"]);
     /// ```
-    pub fn send_roms(&self, roms: Vec<String>) -> Result<(), ProtocolError> {
+    pub fn send_roms(&self, roms: Vec<String>) -> ProtocolResult {
         let mut new_vec: Vec<String> = Vec::new();
         let mut length = 0;
 
@@ -221,11 +223,7 @@ impl SwitchProtocol {
         })
     }
 
-    fn send_file_response_header(
-        &self,
-        cmd_id: ProtocolCommand,
-        data_size: u64,
-    ) -> Result<(), ProtocolError> {
+    fn send_file_response_header(&self, cmd_id: ProtocolCommand, data_size: u64) -> ProtocolResult {
         self.write("TUC0".as_bytes())?;
         self.write(&vec![1])?;
         self.write(&vec![0u8; 0x3])?; // padding 1
@@ -236,7 +234,7 @@ impl SwitchProtocol {
         Ok(())
     }
 
-    fn send_file(&self, padded: bool) -> Result<(), ProtocolError> {
+    fn send_file(&self, padded: bool) -> ProtocolResult {
         let cmd = if padded {
             ProtocolCommand::FileRange
         } else {
@@ -285,7 +283,7 @@ impl SwitchProtocol {
     /// Handles the commands sent by the switch
     /// Call find_switch() before using this function
     /// Send the roms before using this function
-    pub fn poll_commands(&self) -> Result<(), ProtocolError> {
+    pub fn poll_commands(&self) -> ProtocolResult {
         loop {
             let mut header = vec![0u8; 0x20];
             self.read_with_timeout(&mut header, Duration::from_secs(10))?;
