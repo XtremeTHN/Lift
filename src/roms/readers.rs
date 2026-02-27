@@ -1,7 +1,7 @@
 use positioned_io::ReadAt;
 use std::cmp::min;
 use std::io;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 
 pub struct FileRegion<T: ReadAt> {
     pub offset: u64,
@@ -34,6 +34,24 @@ impl<T: ReadAt> Read for FileRegion<T> {
 
         self.pos += size as u64;
         Ok(n)
+    }
+}
+
+impl<T: ReadAt> Seek for FileRegion<T> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        match pos {
+            SeekFrom::Current(v) => {
+                self.pos += v.abs() as u64;
+            }
+            SeekFrom::Start(v) => {
+                self.pos = v;
+            }
+            SeekFrom::End(v) => {
+                self.pos -= v.abs() as u64;
+            }
+        };
+
+        Ok(self.pos)
     }
 }
 

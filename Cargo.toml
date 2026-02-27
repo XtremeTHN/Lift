@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+aes = "0.8.4"
 binrw = "0.15.0"
 env_logger = "0.11.9"
+hex = "0.4.3"
 log = "0.4.29"
 positioned-io = "0.3.5"
 rusb = "0.9.4"

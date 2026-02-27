@@ -14,7 +14,7 @@ pub enum PartitionFsErrors {
     NullTerminatorError,
 }
 
-#[derive(BinRead, Debug)]
+#[derive(BinRead, Debug, Clone, Copy)]
 #[br(little)]
 pub struct PFSEntry {
     offset: u64,

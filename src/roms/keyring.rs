@@ -1,3 +1,5 @@
+use hex::{FromHexError, decode};
+use log::info;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
@@ -8,19 +10,22 @@ use shellexpand::tilde;
 
 #[derive(Error, Debug)]
 pub enum KeyringErrors {
-    #[error("Couldn't decode key/value")]
-    DecodingError(#[from] FromUtf8Error),
+    #[error("Couldn't decode value")]
+    HexDecodingError(#[from] FromHexError),
+
+    #[error("Couldn't decode key")]
+    Utf8DecodingError(#[from] FromUtf8Error),
 
     #[error("Failed to read")]
     ReadError(#[from] std::io::Error),
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct Keyring {
-    key_area_application: Vec<String>,
-    key_area_ocean: Vec<String>,
-    key_area_system: Vec<String>,
-    header_key: String,
+    pub key_area_application: Vec<Vec<u8>>,
+    pub key_area_ocean: Vec<Vec<u8>>,
+    pub key_area_system: Vec<Vec<u8>>,
+    pub header_key: Vec<u8>,
 }
 
 impl Keyring {
@@ -35,27 +40,36 @@ impl Keyring {
         file.read_to_end(&mut buf)?;
 
         for raw_line in buf.split(|&b| b == b'\n') {
-            let line = String::from_utf8(raw_line.to_vec())?;
+            let unsplitted = String::from_utf8(raw_line.to_vec())?;
+            let line = unsplitted.split_once('=');
 
-            let (key, val) = line.split_once('=').unwrap();
+            if line.is_none() {
+                continue;
+            }
+
+            let (key, val) = {
+                let (_key, _val) = line.unwrap();
+
+                (_key.replace(" ", ""), _val.replace(" ", ""))
+            };
 
             if key.starts_with("key_area_key_application_") {
-                self.key_area_application.push(val.to_string());
+                self.key_area_application.push(decode(val).expect("err"));
                 continue;
             }
 
             if key.starts_with("key_area_key_ocean_") {
-                self.key_area_ocean.push(val.to_string());
+                self.key_area_ocean.push(decode(val).expect("err"));
                 continue;
             }
 
             if key.starts_with("key_area_key_system_") {
-                self.key_area_system.push(val.to_string());
+                self.key_area_system.push(decode(val).expect("err"));
                 continue;
             }
 
             if key == "header_key" {
-                self.header_key = val.to_string();
+                self.header_key = decode(val).expect("err");
             }
         }
 

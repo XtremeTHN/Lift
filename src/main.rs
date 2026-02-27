@@ -11,6 +11,8 @@ use std::{
     io::{Read, Write},
 };
 
+use crate::roms::{formats::nca, keyring::Keyring};
+
 fn protocol() -> Result<(), Box<dyn std::error::Error>> {
     let env = Env::default().filter_or("LIFT_LOG", "info");
 
@@ -39,20 +41,19 @@ fn nxroms() {
         info!("Index {}: {}", index, name);
     }
 
-    let mut range = pfs.open_entry(&pfs.header.entry_table[5], file);
+    let entry = pfs.header.entry_table[6];
+    let mut range = pfs.open_entry(&entry, file);
 
-    let mut output = File::create("out.bin").expect("opening:");
+    let mut keyring = Keyring::new();
+    keyring.parse().expect("coulnd't parse");
 
-    loop {
-        let mut buf = vec![0u8; 1024];
-        let read = range.read(&mut buf).expect("reading:");
+    let nca = nca::Nca::new(keyring, &mut range);
 
-        if read == 0 {
-            break;
-        }
-
-        output.write_all(&buf).expect("writting:");
-    }
+    info!(
+        "Nca {} have a content type of {:?}",
+        pfs.header.get_name_for_entry(&entry).expect(""),
+        nca.header.content_type
+    );
 }
 
 fn main() {
