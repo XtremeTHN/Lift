@@ -1,35 +1,53 @@
-use std::fs::File;
+use positioned_io::ReadAt;
+use std::cmp::min;
 use std::io;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::Read;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FileRegion {
+pub struct FileRegion<T: ReadAt> {
     pub offset: u64,
     pub size: u64,
+    pub pos: u64,
+    file: T,
 }
 
-impl FileRegion {
-    pub fn new(offset: u64, size: u64) -> Self {
-        Self { offset, size }
+impl<T: ReadAt> FileRegion<T> {
+    pub fn new(file: T, offset: u64, size: u64) -> Self {
+        Self {
+            offset,
+            size,
+            pos: 0,
+            file,
+        }
     }
+}
 
-    pub fn end(&self) -> u64 {
-        self.offset + self.size
+impl<T: ReadAt> Read for FileRegion<T> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.pos >= self.size {
+            return Ok(0);
+        }
+
+        let size = min(buf.len() as u64, self.size - self.pos) as usize;
+        let n = self
+            .file
+            .read_at(self.pos + self.offset, &mut buf[..size])?;
+
+        self.pos += size as u64;
+        Ok(n)
     }
+}
 
-    pub fn read_from(&self, file: &mut File) -> io::Result<Vec<u8>> {
-        file.seek(SeekFrom::Start(self.offset))?;
+impl<T: ReadAt> ReadAt for FileRegion<T> {
+    fn read_at(&self, pos: u64, buf: &mut [u8]) -> io::Result<usize> {
+        if pos >= self.size {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "position out of bounds",
+            ));
+        }
 
-        let mut buffer = vec![0u8; self.size as usize];
-        file.read_exact(&mut buffer)?;
-
-        Ok(buffer)
-    }
-
-    pub fn copy_to<W: io::Write>(&self, file: &mut File, writer: &mut W) -> io::Result<u64> {
-        file.seek(SeekFrom::Start(self.offset))?;
-
-        let mut limited = file.take(self.size);
-        io::copy(&mut limited, writer)
+        let size = min(buf.len() as u64, self.size - pos) as usize;
+        let n = self.file.read_at(pos + self.offset, &mut buf[..size])?;
+        Ok(n)
     }
 }
