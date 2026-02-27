@@ -29,7 +29,7 @@ fn protocol() -> Result<(), Box<dyn std::error::Error>> {
 
 fn nxroms() {
     let mut file = File::open("undertale.nsp").expect("er");
-    let mut pfs = PartitionFs::new(&mut file).expect("pfs");
+    let pfs = PartitionFs::new(&mut file).expect("pfs");
 
     info!("Listing pfs files...");
     for (index, entry) in pfs.header.entry_table.iter().enumerate() {
@@ -47,12 +47,18 @@ fn nxroms() {
     let mut keyring = Keyring::new();
     keyring.parse().expect("coulnd't parse");
 
-    let nca = nca::Nca::new(keyring, &mut range);
+    let nca = nca::Nca::new(keyring, &mut range).expect("Nca error");
 
+    info!("Has rights id?: {:?}", nca.header.rights_id);
     info!(
         "Nca {} have a content type of {:?}",
         pfs.header.get_name_for_entry(&entry).expect(""),
         nca.header.content_type
+    );
+
+    info!(
+        "Key Area: {:?}",
+        String::from_utf8(nca.key_area.aes_ctr_key).expect("")
     );
 }
 

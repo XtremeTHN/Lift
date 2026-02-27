@@ -27,7 +27,7 @@ pub struct PFSEntry {
 #[br(little)]
 pub struct PartitionFsHeader {
     #[br(count = 4)]
-    magic: Vec<u8>,
+    pub magic: Vec<u8>,
     entry_count: u32,
     #[br(pad_after = 4)]
     string_table_size: u32,
