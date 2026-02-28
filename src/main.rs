@@ -56,14 +56,13 @@ fn nxroms() {
         nca.header.content_type
     );
 
-    info!(
-        "Key Area: {:?}",
-        String::from_utf8(nca.key_area.aes_ctr_key).expect("")
-    );
+    info!("Key Area: {:?}", hex::encode(nca.key_area.aes_ctr_key));
+    info!("Entries: {:?}", nca.header.fs_entries);
+    info!("Headers: {:?}", nca.fs_headers);
 }
 
 fn main() {
-    let env = Env::default().filter_or("LIFT_LOG", "info");
+    let env = Env::default().filter_or("LIFT_LOG", "trace");
 
     env_logger::init_from_env(env);
 

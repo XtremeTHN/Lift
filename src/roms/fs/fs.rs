@@ -2,14 +2,21 @@ use binrw::BinRead;
 use positioned_io::ReadAt;
 // use crate::roms::readers::FileRegion;
 
+pub fn media_to_bytes(media: u32) -> u32 {
+    return media * 0x200;
+}
+
 #[derive(BinRead, Debug, Clone, Copy)]
+#[br(little)]
 pub struct FsEntry {
+    #[br(map(|x| media_to_bytes(x)))]
     start_offset: u32,
+    #[br(pad_after = 0x8, map(|x| media_to_bytes(x)))]
     end_offset: u32,
 }
 
 #[derive(BinRead, Debug, Clone, Copy)]
-#[br(repr = u8)]
+#[br(repr = u8, little)]
 pub enum FsType {
     RomFS = 0,
     PartitionFs = 1,
@@ -19,6 +26,7 @@ pub enum FsType {
 #[br(repr = u8)]
 pub enum HashType {
     Auto = 0,
+    None = 1,
     HierarchicalSha256Hash = 2,
     HierarchicalIntegrityHash = 3,
 }
@@ -86,8 +94,8 @@ pub struct HierarchicalIntegrityLevel {
 pub struct InfoLevelHash {
     max_layers: u32,
 
-    #[br(count = max_layers, pad_after = 0x4)]
-    levels: Vec<InfoLevelHash>,
+    #[br(count = 6)]
+    levels: Vec<HierarchicalIntegrityLevel>,
 
     #[br(count = 0x20)]
     salt: Vec<u8>,
@@ -98,16 +106,17 @@ pub struct InfoLevelHash {
 pub struct HierarchicalIntegrity {
     version: u32,
     master_hash_size: u32,
-    info_level_hash: InfoLevelHash, // check this if error
+    info_level_hash: InfoLevelHash,
+
+    #[br(count = 0x20, pad_after = 0x18)]
+    master_hash: Vec<u8>,
 }
 
 #[derive(BinRead, Debug)]
-#[br(import { _type: HashType })]
 pub enum HashData {
-    #[br(pre_assert(matches!(_type, HashType::HierarchicalIntegrityHash)))]
     HierarchicalIntegrity(HierarchicalIntegrity),
-    #[br(pre_assert(matches!(_type, HashType::HierarchicalSha256Hash)))]
     HierarchicalSha256(HierarchicalSha256Data),
+    // Unknown,
 }
 
 #[derive(BinRead, Debug)]
@@ -119,7 +128,6 @@ pub struct FsHeader {
     encryption_type: EncryptionType,
     #[br(pad_after = 2)]
     meta_hash_type: MetadataHashType,
-    #[br(args { _type: hash_type })]
     hash_data: HashData,
     meta_hash_data_info: MetadataHashInfo,
 

@@ -20,6 +20,7 @@
       packages = with pkgs; [
         rust-analyzer
         rustfmt
+        ghex
       ];
     };
 
