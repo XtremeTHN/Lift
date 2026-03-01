@@ -12,8 +12,11 @@ use std::{
 };
 
 use crate::roms::{
-    formats::{nca, xci::Xci},
-    fs::{hfs::HFSEntry, romfs::RomFs},
+    formats::{
+        nca::{self, Nca},
+        xci::Xci,
+    },
+    fs::{hfs::HFSEntry, pfs::PFSEntry, romfs::RomFs},
     keyring::Keyring,
 };
 
@@ -34,17 +37,46 @@ fn protocol() -> Result<(), Box<dyn std::error::Error>> {
 fn nxroms() {
     let mut file = File::open("ori.xci").expect("er");
     let mut xci = Xci::new(&mut file).expect("err");
-    info!("{}", size_of_val(&xci.root_hfs.header.entry_table[0]));
 
-    let pfs = xci
-        .open_partition_fs("secure".to_string(), &file)
-        .expect("");
+    let mut part = xci
+        .open_partition("secure".to_string(), &file)
+        .expect("err");
+    let pfs = xci.open_partition_fs(&mut part, &file).expect("");
 
     info!("Listing pfs files...");
+
+    let mut keyring = Keyring::new();
+    keyring.parse().expect("");
     for (index, entry) in pfs.header.entry_table.iter().enumerate() {
         let name = pfs.get_name_for_entry(entry).expect("failed to get name:");
+        info!("{}: {}", index, name);
 
-        info!("Index {}: {}", index, name);
+        let mut r = pfs.open_entry(entry, &mut part);
+
+        let mut nca = Nca::new(keyring.clone(), &mut r).expect("err");
+
+        match nca.header.content_type {
+            nca::ContentType::Control => {
+                info!("found control nca at index {}: {}", index, name);
+                let mut fs = nca.open_fs(0, &mut r).expect("err");
+                let rom_fs = RomFs::new(&mut fs).expect("err");
+                // info!("{:?}", rom_fs);
+
+                info!("Listing romfs files...");
+                for file in rom_fs.files.iter() {
+                    let mut f = rom_fs.get_file(file, &mut fs);
+                    let mut buf = vec![0u8; file.size as usize];
+                    f.read_exact(&mut buf).expect("err");
+
+                    let mut out = File::create(String::from_utf8(file.name.clone()).expect("err"))
+                        .expect("err");
+                    out.write_all(&buf).expect("err");
+                }
+
+                break;
+            }
+            _ => {}
+        }
     }
 
     // let entry = pfs.header.entry_table[6];

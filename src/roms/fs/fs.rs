@@ -3,7 +3,6 @@ use positioned_io::ReadAt;
 // use crate::roms::readers::FileRegion;
 
 pub fn media_to_bytes(media: u32) -> u32 {
-    log::info!("{}", media);
     return media * 0x200;
 }
 

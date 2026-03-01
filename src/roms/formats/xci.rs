@@ -86,15 +86,6 @@ impl Xci {
                 continue;
             }
 
-            log::info!(
-                "{} {} {} {} {}",
-                self.header.hfs_header_offset,
-                self.root_hfs.header.raw_data_pos,
-                entry.offset(),
-                entry.size(),
-                self.header.hfs_header_offset + self.root_hfs.header.raw_data_pos + entry.offset()
-            );
-
             let r = FileRegion::new(
                 stream,
                 self.header.hfs_header_offset + self.root_hfs.header.raw_data_pos + entry.offset(),
@@ -109,11 +100,10 @@ impl Xci {
 
     pub fn open_partition_fs<T: ReadAt + Read + Seek>(
         &mut self,
-        partition: String,
+        partition: &mut FileRegion<T>,
         stream: T,
     ) -> Result<PartitionFs<HashPartitionFsHeader>, XciErrors> {
-        let mut r = self.open_partition(partition, stream)?;
-        let hfs_header = HashPartitionFsHeader::read(&mut r)?;
+        let hfs_header = HashPartitionFsHeader::read(partition)?;
         let hfs = PartitionFs::<HashPartitionFsHeader>::new(hfs_header)?;
 
         Ok(hfs)

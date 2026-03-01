@@ -88,11 +88,14 @@ impl<T: ReadAt> EncryptedCtrFileRegion<T> {
     }
 
     fn read_and_decrypt(&self, buf: &mut [u8], pos: u64) -> io::Result<usize> {
+        let remaining = self.inner.size - pos;
+        let max_read = min(buf.len() as u64, remaining) as usize;
+
         let offset = self.inner.offset + pos;
+
         let aligned_offset = align_down(offset, 0x10);
         let diff = (offset - aligned_offset) as usize;
 
-        let max_read = min(buf.len() as u64, offset - self.inner.size) as usize;
         let read_buf_size_raw = max_read + diff;
         let read_buf_size = align_up(read_buf_size_raw, 0x10);
 
@@ -102,6 +105,7 @@ impl<T: ReadAt> EncryptedCtrFileRegion<T> {
         let iv = get_tweak(((aligned_offset as u128) >> 4) | ((self.ctr as u128) << 64));
         let mut cipher = Ctr128BE::<Aes128>::new_from_slices(&self.key, &iv)
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid key/iv"))?;
+
         cipher.apply_keystream(&mut read_buf);
 
         let start = diff;
@@ -159,7 +163,7 @@ impl<T: ReadAt> Read for EncryptedCtrFileRegion<T> {
 
 impl<T: ReadAt> ReadAt for EncryptedCtrFileRegion<T> {
     fn read_at(&self, pos: u64, buf: &mut [u8]) -> io::Result<usize> {
-        if self.inner.pos >= self.inner.size {
+        if pos >= self.inner.size {
             return Ok(0);
         }
 
