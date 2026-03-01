@@ -47,18 +47,28 @@ fn nxroms() {
     let mut keyring = Keyring::new();
     keyring.parse().expect("coulnd't parse");
 
-    let nca = nca::Nca::new(keyring, &mut range).expect("Nca error");
+    let mut nca = nca::Nca::new(keyring, &mut range).expect("Nca error");
 
-    info!("Has rights id?: {:?}", nca.header.rights_id);
-    info!(
-        "Nca {} have a content type of {:?}",
-        pfs.header.get_name_for_entry(&entry).expect(""),
-        nca.header.content_type
-    );
+    info!("dumping");
 
-    info!("Key Area: {:?}", hex::encode(nca.key_area.aes_ctr_key));
-    info!("Entries: {:?}", nca.header.fs_entries);
-    info!("Headers: {:?}", nca.fs_headers);
+    let mut enc_r = nca.open_fs(0, &range).expect("fatal");
+
+    let mut buf = vec![0u8; enc_r.inner.size as usize];
+    let mut f = File::create("out.bin").expect("fata");
+    enc_r.read(&mut buf).expect("");
+
+    f.write_all(&buf).expect("fatal");
+
+    // info!("Has rights id?: {:?}", nca.header.rights_id);
+    // info!(
+    //     "Nca {} have a content type of {:?}",
+    //     pfs.header.get_name_for_entry(&entry).expect(""),
+    //     nca.header.content_type
+    // );
+
+    // info!("Key Area: {:?}", hex::encode(nca.key_area.aes_ctr_key));
+    // info!("Entries: {:?}", nca.header.fs_entries);
+    // info!("Headers: {:?}", nca.fs_headers);
 }
 
 fn main() {

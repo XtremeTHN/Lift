@@ -3,6 +3,7 @@ use positioned_io::ReadAt;
 // use crate::roms::readers::FileRegion;
 
 pub fn media_to_bytes(media: u32) -> u32 {
+    log::info!("{}", media);
     return media * 0x200;
 }
 
@@ -10,19 +11,19 @@ pub fn media_to_bytes(media: u32) -> u32 {
 #[br(little)]
 pub struct FsEntry {
     #[br(map(|x| media_to_bytes(x)))]
-    start_offset: u32,
+    pub start_offset: u32,
     #[br(pad_after = 0x8, map(|x| media_to_bytes(x)))]
-    end_offset: u32,
+    pub end_offset: u32,
 }
 
-#[derive(BinRead, Debug, Clone, Copy)]
+#[derive(BinRead, Debug, PartialEq, Eq, Clone, Copy)]
 #[br(repr = u8, little)]
 pub enum FsType {
     RomFS = 0,
     PartitionFs = 1,
 }
 
-#[derive(BinRead, Debug, Clone, Copy)]
+#[derive(BinRead, Debug, PartialEq, Eq, Clone, Copy)]
 #[br(repr = u8)]
 pub enum HashType {
     Auto = 0,
@@ -31,7 +32,7 @@ pub enum HashType {
     HierarchicalIntegrityHash = 3,
 }
 
-#[derive(BinRead, Debug, Clone, Copy)]
+#[derive(BinRead, Debug, PartialEq, Eq, Clone, Copy)]
 #[br(repr = u8)]
 pub enum EncryptionType {
     Auto = 0,
@@ -43,7 +44,7 @@ pub enum EncryptionType {
     AesCtrExSkipLayerHash = 6,
 }
 
-#[derive(BinRead, Debug, Clone, Copy)]
+#[derive(BinRead, Debug, PartialEq, Eq, Clone, Copy)]
 #[br(repr = u8)]
 pub enum MetadataHashType {
     None = 0,
@@ -63,53 +64,53 @@ pub struct MetadataHashInfo {
 #[derive(BinRead, Debug)]
 #[br(little)]
 pub struct LayerRegion {
-    offset: u64,
-    size: u64,
+    pub offset: u64,
+    pub size: u64,
 }
 
 #[derive(BinRead, Debug)]
 #[br(little)]
 pub struct HierarchicalSha256Data {
     #[br(count = 0x20)]
-    master_hash: Vec<u8>,
-    block_size: u32,
+    pub master_hash: Vec<u8>,
+    pub block_size: u32,
     #[br(pad_after = 0x4)]
-    layer_count: u32,
+    pub layer_count: u32,
 
     #[br(count = layer_count)]
-    layer_regions: Vec<LayerRegion>,
+    pub layer_regions: Vec<LayerRegion>,
 }
 
 #[derive(BinRead, Debug)]
 #[br(little)]
 pub struct HierarchicalIntegrityLevel {
-    logical_offset: u64,
-    hash_data_size: u64,
+    pub logical_offset: u64,
+    pub hash_data_size: u64,
     #[br(pad_after = 0x4)]
-    block_size: u32,
+    pub block_size: u32,
 }
 
 #[derive(BinRead, Debug)]
 #[br(little)]
 pub struct InfoLevelHash {
-    max_layers: u32,
+    pub max_layers: u32,
 
     #[br(count = 6)]
-    levels: Vec<HierarchicalIntegrityLevel>,
+    pub levels: Vec<HierarchicalIntegrityLevel>,
 
     #[br(count = 0x20)]
-    salt: Vec<u8>,
+    pub salt: Vec<u8>,
 }
 
 #[derive(BinRead, Debug)]
 #[br(little, magic = b"IVFC")]
 pub struct HierarchicalIntegrity {
-    version: u32,
-    master_hash_size: u32,
-    info_level_hash: InfoLevelHash,
+    pub version: u32,
+    pub master_hash_size: u32,
+    pub info_level_hash: InfoLevelHash,
 
     #[br(count = 0x20, pad_after = 0x18)]
-    master_hash: Vec<u8>,
+    pub master_hash: Vec<u8>,
 }
 
 #[derive(BinRead, Debug)]
@@ -122,15 +123,17 @@ pub enum HashData {
 #[derive(BinRead, Debug)]
 #[br(little)]
 pub struct FsHeader {
-    version: u16,
-    fs_type: FsType,
-    hash_type: HashType,
-    encryption_type: EncryptionType,
+    pub version: u16,
+    pub fs_type: FsType,
+    pub hash_type: HashType,
+    pub encryption_type: EncryptionType,
     #[br(pad_after = 2)]
-    meta_hash_type: MetadataHashType,
-    hash_data: HashData,
-    meta_hash_data_info: MetadataHashInfo,
-
+    pub meta_hash_type: MetadataHashType,
+    pub hash_data: HashData,
+    pub meta_hash_data_info: MetadataHashInfo,
     #[br(seek_before = std::io::SeekFrom::Start(0x140))]
-    ctr: u64,
+    pub ctr: u64,
+
+    #[br(ignore)]
+    pub section: u8,
 }

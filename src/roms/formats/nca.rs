@@ -1,4 +1,5 @@
-use crate::roms::fs::fs::{FsEntry, FsHeader};
+use crate::roms::fs::fs::{EncryptionType, FsEntry, FsHeader, HashData, HashType};
+use crate::roms::readers::{EncryptedCtrFileRegion, FileRegion};
 use crate::roms::{crypto::get_tweak, keyring::Keyring};
 use aes::cipher::BlockDecryptMut;
 use aes::cipher::block_padding::NoPadding;
@@ -74,9 +75,10 @@ pub struct NcaHeader {
     #[br(count = 4)]
     pub sdk_addon_version: Vec<u8>,
 
+    #[br(pad_after = 0xF)]
     pub key_generation: u8,
 
-    #[br(count = 10)]
+    #[br(count = 0x10)]
     pub rights_id: Vec<u8>,
 
     #[br(count = 4)]
@@ -104,6 +106,8 @@ pub enum NcaErrors {
     InvalidKeys(String),
     #[error("Couldn't read header: {0}")]
     ReadError(#[from] std::io::Error),
+    #[error("Encryption type not supported: {0:?}")]
+    UnsupportedEncryption(EncryptionType),
 }
 
 const NCA_HEADER_SIZE: usize = 0x400;
@@ -209,14 +213,54 @@ impl Nca {
             stream.read_at(offset as u64, &mut buf)?;
 
             if buf.iter().all(|&b| b == 0) {
+                log::info!("Ignoring section: {}", section);
                 continue;
             }
 
             let mut cur = Cursor::new(buf);
-            let header = FsHeader::read(&mut cur)?;
+            let mut header = FsHeader::read(&mut cur)?;
+            header.section = section as u8;
 
             self.fs_headers.push(header);
         }
         Ok(())
+    }
+
+    pub fn get_entry_for_header(&self, header: &FsHeader) -> FsEntry {
+        return self.header.fs_entries[header.section as usize];
+    }
+
+    pub fn open_fs<T: ReadAt>(
+        &mut self,
+        header: usize,
+        stream: T,
+    ) -> Result<EncryptedCtrFileRegion<T>, NcaErrors> {
+        let header = &self.fs_headers[header];
+        let entry = self.get_entry_for_header(&header);
+
+        if header.encryption_type != EncryptionType::AesCtr {
+            return Err(NcaErrors::UnsupportedEncryption(header.encryption_type));
+        }
+
+        let fs_offset: u64;
+        match &header.hash_data {
+            HashData::HierarchicalIntegrity(data) => {
+                fs_offset = entry.start_offset as u64
+                    + data.info_level_hash.levels.last().unwrap().logical_offset;
+            }
+            HashData::HierarchicalSha256(data) => {
+                fs_offset = entry.start_offset as u64 + data.layer_regions.last().unwrap().offset;
+            }
+        }
+
+        log::info!("{:?}", entry);
+
+        let r = FileRegion::new(
+            stream,
+            fs_offset,
+            (entry.end_offset as u64 - fs_offset).into(),
+        );
+        let e = EncryptedCtrFileRegion::new(r, self.key_area.aes_ctr_key.clone(), header.ctr);
+        Ok(e)
     }
 }
