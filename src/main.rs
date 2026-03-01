@@ -11,7 +11,7 @@ use std::{
     io::{Read, Write},
 };
 
-use crate::roms::{formats::nca, keyring::Keyring};
+use crate::roms::{formats::nca, fs::romfs::RomFs, keyring::Keyring};
 
 fn protocol() -> Result<(), Box<dyn std::error::Error>> {
     let env = Env::default().filter_or("LIFT_LOG", "info");
@@ -51,12 +51,12 @@ fn nxroms() {
 
     info!("dumping");
 
-    let rom_fs = nca.open_romfs(0, &mut range).expect("fatal");
-    // info!("{:?}", rom_fs);
+    // let rom_fs = nca.open_romfs(0, &mut range).expect("fatal");
+    let mut fs = nca.open_fs(0, &range).expect("fail");
+    let rom_fs = RomFs::new(&mut fs).expect("err");
+    info!("{:?}", rom_fs);
 
-    for x in rom_fs.files.iter() {
-        info!("File {}", rom_fs.get_name_for_entry(x).expect("failed"));
-    }
+    let mut f = rom_fs.get_file(&rom_fs.files[0], &fs);
 
     // let mut buf = vec![0u8; enc_r.inner.size as usize];
     // let mut f = File::create("out.bin").expect("fata");

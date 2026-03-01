@@ -268,22 +268,4 @@ impl Nca {
         let e = EncryptedCtrFileRegion::new(r, self.key_area.aes_ctr_key.clone(), header.ctr);
         Ok(e)
     }
-
-    pub fn open_romfs<T: ReadAt>(
-        &mut self,
-        index: usize,
-        stream: &mut T,
-    ) -> Result<RomFs, NcaErrors> {
-        let header = &self.fs_headers[index];
-
-        match header.fs_type {
-            FsType::RomFS => {
-                let mut fs = self.open_fs(index, stream)?;
-                return Ok(RomFs::new(&mut fs)?);
-            }
-            _ => {
-                return Err(NcaErrors::InvalidFsType(header.fs_type, FsType::RomFS));
-            }
-        }
-    }
 }

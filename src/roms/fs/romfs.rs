@@ -6,6 +6,8 @@ use std::{
 use binrw::BinRead;
 use positioned_io::ReadAt;
 
+use crate::roms::readers::FileRegion;
+
 #[derive(BinRead, Debug)]
 #[br(little)]
 pub struct RomFsHeader {
@@ -70,7 +72,7 @@ pub struct RomFs {
 }
 
 impl RomFs {
-    pub fn new<T: Read + Seek>(stream: &mut T) -> Result<Self, RomFsErrors> {
+    pub fn new<T: ReadAt + Read + Seek>(stream: &mut T) -> Result<Self, RomFsErrors> {
         let mut r = RomFs {
             header: RomFsHeader::read(stream)?,
             files: vec![],
@@ -81,17 +83,15 @@ impl RomFs {
         Ok(r)
     }
 
-    fn populate_files<T: Read + Seek>(&mut self, stream: &mut T) -> Result<(), RomFsErrors> {
+    fn populate_files<T: ReadAt>(&mut self, stream: &mut T) -> Result<(), RomFsErrors> {
         let mut sibling: u64 = 0;
-        let old = stream.stream_position()?;
 
         loop {
             let offset = self.header.file_meta_table_offset + sibling;
             let size = self.header.file_meta_table_size - sibling;
             let mut buffer = vec![0u8; size as usize];
 
-            stream.seek(SeekFrom::Start(offset))?;
-            stream.read(&mut buffer)?;
+            stream.read_at(offset, &mut buffer)?;
 
             let mut cur = Cursor::new(buffer);
             let f = RomFsFileEntry::read(&mut cur)?;
@@ -100,7 +100,6 @@ impl RomFs {
             self.files.push(f);
 
             if sibling == 4294967295 {
-                stream.seek(SeekFrom::Start(old))?;
                 return Ok(());
             }
         }
@@ -108,5 +107,9 @@ impl RomFs {
 
     pub fn get_name_for_entry(&self, entry: &RomFsFileEntry) -> Result<String, FromUtf8Error> {
         return String::from_utf8(entry.name.clone());
+    }
+
+    pub fn get_file<T: ReadAt>(&self, file: &RomFsFileEntry, stream: T) -> FileRegion<T> {
+        FileRegion::new(stream, self.header.data_offset + file.offset, file.size)
     }
 }
