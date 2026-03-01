@@ -120,7 +120,7 @@ const NCA_ENCRYPTED_SIZE: usize = 0xC00;
 const NCA_HEADER_SECTION_SIZE: usize = 0x200;
 
 impl Nca {
-    pub fn new<T: ReadAt>(keyring: Keyring, stream: &mut T) -> Result<Self, NcaErrors> {
+    pub fn new<T: ReadAt>(keyring: &Keyring, stream: &mut T) -> Result<Self, NcaErrors> {
         let mut header_buf = vec![0u8; NCA_ENCRYPTED_SIZE];
         stream.read_exact_at(0x0, &mut header_buf)?;
 
@@ -218,7 +218,7 @@ impl Nca {
             stream.read_at(offset as u64, &mut buf)?;
 
             if buf.iter().all(|&b| b == 0) {
-                log::info!("Ignoring section: {}", section);
+                log::debug!("Ignoring section: {}", section);
                 continue;
             }
 
@@ -257,8 +257,6 @@ impl Nca {
                 fs_offset = entry.start_offset as u64 + data.layer_regions.last().unwrap().offset;
             }
         }
-
-        log::info!("{:?}", entry);
 
         let r = FileRegion::new(
             stream,
