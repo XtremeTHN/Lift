@@ -51,13 +51,18 @@ fn nxroms() {
 
     info!("dumping");
 
-    let mut enc_r = nca.open_fs(0, &range).expect("fatal");
+    let rom_fs = nca.open_romfs(0, &mut range).expect("fatal");
+    // info!("{:?}", rom_fs);
 
-    let mut buf = vec![0u8; enc_r.inner.size as usize];
-    let mut f = File::create("out.bin").expect("fata");
-    enc_r.read(&mut buf).expect("");
+    for x in rom_fs.files.iter() {
+        info!("File {}", rom_fs.get_name_for_entry(x).expect("failed"));
+    }
 
-    f.write_all(&buf).expect("fatal");
+    // let mut buf = vec![0u8; enc_r.inner.size as usize];
+    // let mut f = File::create("out.bin").expect("fata");
+    // enc_r.read(&mut buf).expect("");
+
+    // f.write_all(&buf).expect("fatal");
 
     // info!("Has rights id?: {:?}", nca.header.rights_id);
     // info!(

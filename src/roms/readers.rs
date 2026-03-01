@@ -127,34 +127,33 @@ impl<T: ReadAt> Read for EncryptedCtrFileRegion<T> {
         }
 
         let offset = self.inner.offset + self.inner.pos;
-        log::info!("{}", offset);
-
         let aligned_offset = align_down(offset, 0x10);
         let diff = (offset - aligned_offset) as usize;
 
         let max_read = min(buf.len() as u64, offset - self.inner.size) as usize;
-
         let read_buf_size_raw = max_read + diff;
         let read_buf_size = align_up(read_buf_size_raw, 0x10);
 
         let mut read_buf = vec![0u8; read_buf_size];
-
-        let _ = self.inner.file.read_at(aligned_offset, &mut read_buf)?;
+        self.inner.file.read_at(aligned_offset, &mut read_buf)?;
 
         let iv = get_tweak(((aligned_offset as u128) >> 4) | ((self.ctr as u128) << 64));
-
         let mut cipher = Ctr128BE::<Aes128>::new_from_slices(&self.key, &iv)
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid key/iv"))?;
-
         cipher.apply_keystream(&mut read_buf);
 
         let start = diff;
         let end = start + max_read;
-
         buf[..max_read].copy_from_slice(&read_buf[start..end]);
 
         self.inner.pos += max_read as u64;
 
         Ok(max_read)
+    }
+}
+
+impl<T: ReadAt> Seek for EncryptedCtrFileRegion<T> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        return self.inner.seek(pos);
     }
 }

@@ -1,4 +1,5 @@
-use crate::roms::fs::fs::{EncryptionType, FsEntry, FsHeader, HashData, HashType};
+use crate::roms::fs::fs::{EncryptionType, FsEntry, FsHeader, FsType, HashData};
+use crate::roms::fs::romfs::{RomFs, RomFsErrors};
 use crate::roms::readers::{EncryptedCtrFileRegion, FileRegion};
 use crate::roms::{crypto::get_tweak, keyring::Keyring};
 use aes::cipher::BlockDecryptMut;
@@ -108,6 +109,10 @@ pub enum NcaErrors {
     ReadError(#[from] std::io::Error),
     #[error("Encryption type not supported: {0:?}")]
     UnsupportedEncryption(EncryptionType),
+    #[error("Error while trying to read romfs: {0:?}")]
+    RomFsError(#[from] RomFsErrors),
+    #[error("Invalid fs type: {0:?}, expected {1:?}")]
+    InvalidFsType(FsType, FsType),
 }
 
 const NCA_HEADER_SIZE: usize = 0x400;
@@ -262,5 +267,23 @@ impl Nca {
         );
         let e = EncryptedCtrFileRegion::new(r, self.key_area.aes_ctr_key.clone(), header.ctr);
         Ok(e)
+    }
+
+    pub fn open_romfs<T: ReadAt>(
+        &mut self,
+        index: usize,
+        stream: &mut T,
+    ) -> Result<RomFs, NcaErrors> {
+        let header = &self.fs_headers[index];
+
+        match header.fs_type {
+            FsType::RomFS => {
+                let mut fs = self.open_fs(index, stream)?;
+                return Ok(RomFs::new(&mut fs)?);
+            }
+            _ => {
+                return Err(NcaErrors::InvalidFsType(header.fs_type, FsType::RomFS));
+            }
+        }
     }
 }
