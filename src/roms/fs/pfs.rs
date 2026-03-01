@@ -16,11 +16,25 @@ pub enum PartitionFsErrors {
 
 #[derive(BinRead, Debug, Clone, Copy)]
 #[br(little)]
-pub struct PFSEntry {
-    offset: u64,
-    size: u64,
+pub struct PartitionFsEntry {
+    _offset: u64,
+    _size: u64,
     #[br(pad_after = 4)]
-    string_offset: u32,
+    _string_offset: u32,
+}
+
+impl PFSEntry for PartitionFsEntry {
+    fn string_offset(&self) -> u32 {
+        self._string_offset
+    }
+
+    fn size(&self) -> u64 {
+        self._size
+    }
+
+    fn offset(&self) -> u64 {
+        self._offset
+    }
 }
 
 #[derive(BinRead, Debug)]
@@ -31,42 +45,43 @@ pub struct PartitionFsHeader {
     string_table_size: u32,
 
     #[br(count = entry_count)]
-    pub entry_table: Vec<PFSEntry>,
+    pub entry_table: Vec<PartitionFsEntry>,
 
     #[br(count = string_table_size)]
-    string_table: Vec<u8>,
+    _string_table: Vec<u8>,
 
     #[br(calc = entry_count as u64 * size_of_val(&entry_table) as u64 + string_table_size as u64 + 0x10)]
     pub raw_data_pos: u64,
 }
 
-impl PartitionFsHeader {
-    pub fn get_name_for_entry(&self, entry: &PFSEntry) -> Result<String, PartitionFsErrors> {
-        let slice = &self.string_table[entry.string_offset as usize..];
-
-        match slice.iter().position(|&b| b == 0) {
-            Some(pos) => Ok(String::from_utf8(slice[..pos].to_vec())?),
-            None => Err(PartitionFsErrors::NullTerminatorError),
-        }
-    }
-}
-
 pub trait PFSHeader {
     fn raw_data_pos(&self) -> u64;
+    fn string_table(&self) -> &[u8];
+}
+
+pub trait PFSEntry {
+    fn string_offset(&self) -> u32;
+    fn size(&self) -> u64;
+    fn offset(&self) -> u64;
 }
 
 impl PFSHeader for PartitionFsHeader {
     fn raw_data_pos(&self) -> u64 {
         return self.raw_data_pos;
     }
+
+    fn string_table(&self) -> &[u8] {
+        return &self._string_table;
+    }
 }
 
+#[derive(Debug)]
 pub struct PartitionFs<T: BinRead + PFSHeader> {
     pub header: T,
 }
 
 impl<T: BinRead + PFSHeader> PartitionFs<T> {
-    pub fn new<R: Read + Seek>(header: T) -> Result<Self, binrw::Error> {
+    pub fn new(header: T) -> Result<Self, binrw::Error> {
         Ok(Self { header })
     }
 
@@ -75,14 +90,23 @@ impl<T: BinRead + PFSHeader> PartitionFs<T> {
     ) -> Result<PartitionFs<PartitionFsHeader>, binrw::Error> {
         let h = PartitionFsHeader::read(stream)?;
 
-        return PartitionFs::<PartitionFsHeader>::new::<R>(h);
+        return PartitionFs::<PartitionFsHeader>::new(h);
     }
 
-    pub fn open_entry<R: ReadAt>(&self, entry: &PFSEntry, stream: R) -> FileRegion<R> {
+    pub fn get_name_for_entry<E: PFSEntry>(&self, entry: &E) -> Result<String, PartitionFsErrors> {
+        let slice = &self.header.string_table()[entry.string_offset() as usize..];
+
+        match slice.iter().position(|&b| b == 0) {
+            Some(pos) => Ok(String::from_utf8(slice[..pos].to_vec())?),
+            None => Err(PartitionFsErrors::NullTerminatorError),
+        }
+    }
+
+    pub fn open_entry<R: ReadAt, E: PFSEntry>(&self, entry: &E, stream: R) -> FileRegion<R> {
         return FileRegion::new(
             stream,
-            entry.offset + self.header.raw_data_pos(),
-            entry.size,
+            entry.string_offset() as u64 + self.header.raw_data_pos(),
+            entry.size(),
         );
     }
 }

@@ -1,14 +1,28 @@
 use binrw::BinRead;
 
-use crate::roms::fs::pfs::PFSHeader;
+use crate::roms::fs::pfs::{PFSEntry, PFSHeader, PartitionFsErrors};
 
 #[derive(BinRead, Debug, Clone, Copy)]
 #[br(little)]
 pub struct HFSEntry {
-    offset: u64,
-    size: u64,
-    #[br(pad_after = 0x18)]
-    string_offset: u32,
+    _offset: u64,
+    _size: u64,
+    #[br(pad_after = 0x2C)]
+    _string_offset: u32,
+}
+
+impl PFSEntry for HFSEntry {
+    fn string_offset(&self) -> u32 {
+        self._string_offset
+    }
+
+    fn size(&self) -> u64 {
+        self._size
+    }
+
+    fn offset(&self) -> u64 {
+        self._offset
+    }
 }
 
 #[derive(BinRead, Debug)]
@@ -24,12 +38,17 @@ pub struct HashPartitionFsHeader {
     #[br(count = string_table_size)]
     string_table: Vec<u8>,
 
-    #[br(calc = entry_count as u64 * size_of_val(&entry_table) as u64 + string_table_size as u64 + 0x10)]
+    // HFSEntry is 0x40 bytes, not 0x18 like PFS0
+    #[br(calc = entry_count as u64 * 0x40 as u64 + string_table_size as u64 + 0x10)]
     pub raw_data_pos: u64,
 }
 
 impl PFSHeader for HashPartitionFsHeader {
     fn raw_data_pos(&self) -> u64 {
         return self.raw_data_pos;
+    }
+
+    fn string_table(&self) -> &[u8] {
+        return &self.string_table;
     }
 }

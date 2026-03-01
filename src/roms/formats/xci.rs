@@ -1,6 +1,13 @@
 use binrw::BinRead;
 
-use crate::roms::fs::fs::media_to_bytes;
+use crate::roms::{
+    fs::{
+        fs::media_to_bytes,
+        hfs::HashPartitionFsHeader,
+        pfs::{PFSEntry, PartitionFs, PartitionFsErrors},
+    },
+    readers::FileRegion,
+};
 use positioned_io::ReadAt;
 use std::io::{Read, Seek, SeekFrom};
 
@@ -37,11 +44,16 @@ pub enum XciErrors {
     CorruptXci(#[from] binrw::Error),
     #[error("Invalid magic: {0:?}")]
     InvalidMagic(Vec<u8>),
+    #[error("Partition not found: {0}")]
+    PartitionNotFound(String),
+    #[error("PartitionFs error: {0}")]
+    PartitionFsError(#[from] PartitionFsErrors),
 }
 
 #[derive(Debug)]
 pub struct Xci {
     pub header: XciHeader,
+    pub root_hfs: PartitionFs<HashPartitionFsHeader>,
 }
 
 impl Xci {
@@ -52,8 +64,58 @@ impl Xci {
             return Err(XciErrors::InvalidMagic(h.magic));
         }
 
-        Ok(Self { header: h })
+        stream.seek(SeekFrom::Start(h.hfs_header_offset)).unwrap();
+        let hfs_header = HashPartitionFsHeader::read(stream)?;
+        let root_hfs = PartitionFs::<HashPartitionFsHeader>::new(hfs_header)?;
+
+        Ok(Self {
+            header: h,
+            root_hfs,
+        })
     }
 
-    pub fn open_partition(&mut self, partition: String) {}
+    pub fn open_partition<T: ReadAt + Read + Seek>(
+        &mut self,
+        partition: String,
+        stream: T,
+    ) -> Result<FileRegion<T>, XciErrors> {
+        for entry in self.root_hfs.header.entry_table.iter() {
+            let name = self.root_hfs.get_name_for_entry(entry)?;
+
+            if name != partition {
+                continue;
+            }
+
+            log::info!(
+                "{} {} {} {} {}",
+                self.header.hfs_header_offset,
+                self.root_hfs.header.raw_data_pos,
+                entry.offset(),
+                entry.size(),
+                self.header.hfs_header_offset + self.root_hfs.header.raw_data_pos + entry.offset()
+            );
+
+            let r = FileRegion::new(
+                stream,
+                self.header.hfs_header_offset + self.root_hfs.header.raw_data_pos + entry.offset(),
+                entry.size(),
+            );
+
+            return Ok(r);
+        }
+
+        Err(XciErrors::PartitionNotFound(partition))
+    }
+
+    pub fn open_partition_fs<T: ReadAt + Read + Seek>(
+        &mut self,
+        partition: String,
+        stream: T,
+    ) -> Result<PartitionFs<HashPartitionFsHeader>, XciErrors> {
+        let mut r = self.open_partition(partition, stream)?;
+        let hfs_header = HashPartitionFsHeader::read(&mut r)?;
+        let hfs = PartitionFs::<HashPartitionFsHeader>::new(hfs_header)?;
+
+        Ok(hfs)
+    }
 }

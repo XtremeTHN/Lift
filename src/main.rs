@@ -13,7 +13,7 @@ use std::{
 
 use crate::roms::{
     formats::{nca, xci::Xci},
-    fs::romfs::RomFs,
+    fs::{hfs::HFSEntry, romfs::RomFs},
     keyring::Keyring,
 };
 
@@ -33,20 +33,19 @@ fn protocol() -> Result<(), Box<dyn std::error::Error>> {
 
 fn nxroms() {
     let mut file = File::open("ori.xci").expect("er");
-    let xci = Xci::new(&mut file).expect("err");
+    let mut xci = Xci::new(&mut file).expect("err");
+    info!("{}", size_of_val(&xci.root_hfs.header.entry_table[0]));
 
-    info!("{:?}", xci);
-    // let pfs = PartitionFs::new(&mut file).expect("pfs");
+    let pfs = xci
+        .open_partition_fs("secure".to_string(), &file)
+        .expect("");
 
-    // info!("Listing pfs files...");
-    // for (index, entry) in pfs.header.entry_table.iter().enumerate() {
-    //     let name = pfs
-    //         .header
-    //         .get_name_for_entry(&entry)
-    //         .expect("failed to get name:");
+    info!("Listing pfs files...");
+    for (index, entry) in pfs.header.entry_table.iter().enumerate() {
+        let name = pfs.get_name_for_entry(entry).expect("failed to get name:");
 
-    //     info!("Index {}: {}", index, name);
-    // }
+        info!("Index {}: {}", index, name);
+    }
 
     // let entry = pfs.header.entry_table[6];
     // let mut range = pfs.open_entry(&entry, file);
