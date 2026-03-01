@@ -44,11 +44,16 @@ pub struct HashPartitionFsHeader {
 }
 
 impl PFSHeader for HashPartitionFsHeader {
+    type Entry = HFSEntry;
     fn raw_data_pos(&self) -> u64 {
-        return self.raw_data_pos;
+        self.raw_data_pos
     }
 
     fn string_table(&self) -> &[u8] {
-        return &self.string_table;
+        &self.string_table
+    }
+
+    fn entry_table(&self) -> &Vec<Self::Entry> {
+        &self.entry_table
     }
 }

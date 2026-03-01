@@ -55,8 +55,11 @@ pub struct PartitionFsHeader {
 }
 
 pub trait PFSHeader {
+    type Entry: PFSEntry;
+
     fn raw_data_pos(&self) -> u64;
     fn string_table(&self) -> &[u8];
+    fn entry_table(&self) -> &Vec<Self::Entry>;
 }
 
 pub trait PFSEntry {
@@ -66,12 +69,18 @@ pub trait PFSEntry {
 }
 
 impl PFSHeader for PartitionFsHeader {
+    type Entry = PartitionFsEntry;
+
     fn raw_data_pos(&self) -> u64 {
-        return self.raw_data_pos;
+        self.raw_data_pos
     }
 
     fn string_table(&self) -> &[u8] {
-        return &self._string_table;
+        &self._string_table
+    }
+
+    fn entry_table(&self) -> &Vec<Self::Entry> {
+        &self.entry_table
     }
 }
 
@@ -83,14 +92,6 @@ pub struct PartitionFs<T: BinRead + PFSHeader> {
 impl<T: BinRead + PFSHeader> PartitionFs<T> {
     pub fn new(header: T) -> Result<Self, binrw::Error> {
         Ok(Self { header })
-    }
-
-    pub fn new_default_header<R: Read + Seek>(
-        stream: &mut R,
-    ) -> Result<PartitionFs<PartitionFsHeader>, binrw::Error> {
-        let h = PartitionFsHeader::read(stream)?;
-
-        return PartitionFs::<PartitionFsHeader>::new(h);
     }
 
     pub fn get_name_for_entry<E: PFSEntry>(&self, entry: &E) -> Result<String, PartitionFsErrors> {
@@ -108,5 +109,15 @@ impl<T: BinRead + PFSHeader> PartitionFs<T> {
             entry.offset() as u64 + self.header.raw_data_pos(),
             entry.size(),
         );
+    }
+}
+
+impl PartitionFs<PartitionFsHeader> {
+    pub fn new_default_header<R: Read + Seek>(
+        stream: &mut R,
+    ) -> Result<PartitionFs<PartitionFsHeader>, binrw::Error> {
+        let h = PartitionFsHeader::read(stream)?;
+
+        return PartitionFs::<PartitionFsHeader>::new(h);
     }
 }
