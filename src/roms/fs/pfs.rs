@@ -24,10 +24,8 @@ pub struct PFSEntry {
 }
 
 #[derive(BinRead, Debug)]
-#[br(little)]
+#[br(little, magic = b"PFS0")]
 pub struct PartitionFsHeader {
-    #[br(count = 4)]
-    pub magic: Vec<u8>,
     entry_count: u32,
     #[br(pad_after = 4)]
     string_table_size: u32,
@@ -53,18 +51,38 @@ impl PartitionFsHeader {
     }
 }
 
-pub struct PartitionFs {
-    pub header: PartitionFsHeader,
+pub trait PFSHeader {
+    fn raw_data_pos(&self) -> u64;
 }
 
-impl PartitionFs {
-    pub fn new<T: Read + Seek>(stream: &mut T) -> Result<PartitionFs, binrw::Error> {
-        Ok(Self {
-            header: PartitionFsHeader::read(stream)?,
-        })
+impl PFSHeader for PartitionFsHeader {
+    fn raw_data_pos(&self) -> u64 {
+        return self.raw_data_pos;
+    }
+}
+
+pub struct PartitionFs<T: BinRead + PFSHeader> {
+    pub header: T,
+}
+
+impl<T: BinRead + PFSHeader> PartitionFs<T> {
+    pub fn new<R: Read + Seek>(header: T) -> Result<Self, binrw::Error> {
+        Ok(Self { header })
     }
 
-    pub fn open_entry<T: ReadAt>(&self, entry: &PFSEntry, stream: T) -> FileRegion<T> {
-        return FileRegion::new(stream, entry.offset + self.header.raw_data_pos, entry.size);
+    pub fn new_default_header<R: Read + Seek>(
+        stream: &mut R,
+    ) -> Result<PartitionFs<PartitionFsHeader>, binrw::Error> {
+        let h = PartitionFsHeader::read(stream)?;
+
+        return PartitionFs::<PartitionFsHeader>::new::<R>(h);
+    }
+
+    pub fn open_entry<R: ReadAt>(&self, entry: &PFSEntry, stream: R) -> FileRegion<R> {
+        return FileRegion::new(
+            stream,
+            entry.offset + self.header.raw_data_pos(),
+            entry.size,
+        );
     }
 }

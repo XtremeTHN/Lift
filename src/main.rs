@@ -11,7 +11,11 @@ use std::{
     io::{Read, Write},
 };
 
-use crate::roms::{formats::nca, fs::romfs::RomFs, keyring::Keyring};
+use crate::roms::{
+    formats::{nca, xci::Xci},
+    fs::romfs::RomFs,
+    keyring::Keyring,
+};
 
 fn protocol() -> Result<(), Box<dyn std::error::Error>> {
     let env = Env::default().filter_or("LIFT_LOG", "info");
@@ -28,35 +32,37 @@ fn protocol() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn nxroms() {
-    let mut file = File::open("undertale.nsp").expect("er");
-    let pfs = PartitionFs::new(&mut file).expect("pfs");
+    let mut file = File::open("ori.xci").expect("er");
+    let xci = Xci::new(&mut file).expect("err");
 
-    info!("Listing pfs files...");
-    for (index, entry) in pfs.header.entry_table.iter().enumerate() {
-        let name = pfs
-            .header
-            .get_name_for_entry(&entry)
-            .expect("failed to get name:");
+    info!("{:?}", xci);
+    // let pfs = PartitionFs::new(&mut file).expect("pfs");
 
-        info!("Index {}: {}", index, name);
-    }
+    // info!("Listing pfs files...");
+    // for (index, entry) in pfs.header.entry_table.iter().enumerate() {
+    //     let name = pfs
+    //         .header
+    //         .get_name_for_entry(&entry)
+    //         .expect("failed to get name:");
 
-    let entry = pfs.header.entry_table[6];
-    let mut range = pfs.open_entry(&entry, file);
+    //     info!("Index {}: {}", index, name);
+    // }
 
-    let mut keyring = Keyring::new();
-    keyring.parse().expect("coulnd't parse");
+    // let entry = pfs.header.entry_table[6];
+    // let mut range = pfs.open_entry(&entry, file);
 
-    let mut nca = nca::Nca::new(keyring, &mut range).expect("Nca error");
+    // let mut keyring = Keyring::new();
+    // keyring.parse().expect("coulnd't parse");
 
-    info!("dumping");
+    // let mut nca = nca::Nca::new(keyring, &mut range).expect("Nca error");
 
-    // let rom_fs = nca.open_romfs(0, &mut range).expect("fatal");
-    let mut fs = nca.open_fs(0, &range).expect("fail");
-    let rom_fs = RomFs::new(&mut fs).expect("err");
-    info!("{:?}", rom_fs);
+    // info!("dumping");
 
-    let mut f = rom_fs.get_file(&rom_fs.files[0], &fs);
+    // let mut fs = nca.open_fs(0, &range).expect("fail");
+    // let rom_fs = RomFs::new(&mut fs).expect("err");
+    // info!("{:?}", rom_fs);
+
+    // let mut f = rom_fs.get_file(&rom_fs.files[0], &fs);
 
     // let mut buf = vec![0u8; enc_r.inner.size as usize];
     // let mut f = File::create("out.bin").expect("fata");
