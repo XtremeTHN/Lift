@@ -63,7 +63,6 @@ impl TryFrom<u32> for ProtocolCommand {
 /// ```
 pub struct SwitchProtocol {
     pub ctx: Context,
-    pub switch: Option<Device<Context>>,
     handle: Option<DeviceHandle<Context>>,
 
     interface_num: Option<u8>,
@@ -88,7 +87,6 @@ impl SwitchProtocol {
 
         Ok(Self {
             ctx,
-            switch: None,
             handle: None,
             interface_num: None,
             in_endpoint: None,
@@ -142,6 +140,20 @@ impl SwitchProtocol {
         Ok(())
     }
 
+    fn open_from_fd(&self, fd: i32) -> Result<DeviceHandle<Context>, ProtocolError> {
+        unsafe {
+            let r = self.ctx.open_device_with_fd(fd)?;
+            Ok(r)
+        }
+    }
+
+    pub fn open_switch_from_fd(&mut self, fd: i32) -> ProtocolResult {
+        let handle = self.open_from_fd(fd)?;
+        self.handle = Some(handle);
+
+        Ok(())
+    }
+
     /// Finds the usb device where the switch is connected and sets the switch and handle fields of Self
     pub fn find_switch(&mut self) -> ProtocolResult {
         let devs = self.ctx.devices()?;
@@ -167,7 +179,6 @@ impl SwitchProtocol {
         handle.claim_interface(self.interface_num.unwrap())?;
 
         self.handle = Some(handle);
-        self.switch = Some(dev);
 
         Ok(())
     }
