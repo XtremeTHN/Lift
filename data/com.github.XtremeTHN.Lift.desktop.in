@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Lift
+Exec=lift
+Icon=com.github.XtremeTHN.Lift
+Terminal=false
+Type=Application
+Categories=Utility;
+Keywords=GTK;
+StartupNotify=true
+DBusActivatable=true

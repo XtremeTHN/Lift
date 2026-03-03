@@ -1,0 +1,6 @@
+# List of source files containing translatable strings.
+# Please keep this file sorted alphabetically.
+data/com.github.XtremeTHN.Lift.desktop.in
+data/com.github.XtremeTHN.Lift.metainfo.xml.in
+data/com.github.XtremeTHN.Lift.gschema.xml
+src/window.ui

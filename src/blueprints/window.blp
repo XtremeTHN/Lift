@@ -1,0 +1,22 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $LiftWindow: Adw.ApplicationWindow {
+    content: Adw.ToastOverlay ovr {
+      child: Adw.ToolbarView {
+        [top]
+        Adw.HeaderBar {}
+
+        content: Adw.Bin {
+          halign: center;
+          valign: center;
+
+          Button btt {
+            styles ["pill", "suggested-action"]
+            label: "Acquire device";
+            action-name: "win.find-switch";
+          }
+        };
+      };
+    };
+}
