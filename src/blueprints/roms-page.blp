@@ -1,0 +1,83 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $RomsPage: Adw.NavigationPage {
+    title: "Lift";
+    tag: "roms-page";
+
+    child: Adw.ToolbarView {
+        [top]
+        Adw.HeaderBar {
+            [end]
+            Button {
+                icon-name: "user-trash-symbolic";
+                action-name: "clear-all";
+                tooltip-text: _("Clear all");
+            }
+
+            [end]
+            Button {
+                icon-name: "plus-large-symbolic";
+                action-name: "add-rom";
+                tooltip-text: _("Add rom");
+            }
+        }
+
+        [bottom]
+        Box {
+            margin-bottom: 10;
+            margin-end: 10;
+            margin-start: 10;
+            spacing: 5;
+            orientation: vertical;
+
+            Revealer rev {
+                child: Box {
+                    spacing: 5;
+                    orientation: vertical;
+
+                    Label info_label {
+                        halign: start;
+                    }
+
+                    ProgressBar total_progress {}
+                };
+            }
+
+            Button {
+                hexpand: true;
+                label: _("Upload to switch");
+                action-name: "upload";
+            }
+        }
+
+        content: ScrolledWindow {
+            child: Stack stack {
+                StackPage {
+                    name: "placeholder";
+
+                    child: Adw.StatusPage {
+                        icon-name: "nintendo-controller-symbolic";
+                        title: _("No rooms");
+                        description: _("Add roms through the plus button above. Only .nsp or .xci roms are allowed.");
+                    };
+                }
+
+                StackPage {
+                    name: "roms";
+
+                    child: Adw.Clamp {
+                        child: ListBox list_box {
+                            styles [
+                                "boxed-list",
+                            ]
+
+                            valign: start;
+                            selection-mode: none;
+                        };
+                    };
+                }
+            };
+        };
+    };
+}

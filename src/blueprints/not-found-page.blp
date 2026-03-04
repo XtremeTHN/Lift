@@ -1,0 +1,18 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $NotFoundPage: Adw.NavigationPage {
+  title: "Lift";
+  tag: "switch-not-found";
+
+  child: Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {}
+
+    content: Adw.StatusPage {
+      icon-name: "drive-harddisk-usb-symbolic";
+      title: "Switch not found";
+      description: "Connect your switch to your pc through usb";
+    };
+  };
+}

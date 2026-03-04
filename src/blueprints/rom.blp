@@ -1,0 +1,64 @@
+using Gtk 4.0;
+
+template $Rom: ListBoxRow {
+    child: Box {
+        styles [
+            "box-10",
+        ]
+
+        orientation: vertical;
+        spacing: 10;
+
+        Box {
+            spacing: 10;
+
+            Frame frame {
+                child: Overlay {
+                    width-request: 60;
+                    height-request: 60;
+
+                    [overlay]
+                    Picture icon {}
+                };
+            }
+
+            Box {
+                orientation: vertical;
+                hexpand: true;
+
+                Label rom_title {
+                    xalign: 0;
+                }
+
+                Label rom_version {
+                    styles [
+                        "caption",
+                    ]
+
+                    opacity: 0.6;
+                    xalign: 0;
+                }
+
+                Label rom_size {
+                    styles [
+                        "caption",
+                    ]
+
+                    opacity: 0.6;
+                    xalign: 0;
+                }
+            }
+
+            Button {
+                valign: center;
+                halign: end;
+
+                child: Image end_button_image {
+                    icon-name: "user-trash-symbolic";
+                };
+
+                clicked => $remove_rom() swapped;
+            }
+        }
+    };
+}

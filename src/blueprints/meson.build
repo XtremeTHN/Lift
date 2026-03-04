@@ -1,6 +1,12 @@
 blueprints = custom_target('blueprints',
     input: files(
         'window.blp',
+        'get-started-dialog.blp',
+        'not-found-page.blp',
+        'rom.blp',
+        'roms-page.blp',
+        'exception-dialog.blp',
+        'upload-alert.blp'
     ),
     output: '.',
     command: [

@@ -2,5 +2,16 @@
 <gresources>
   <gresource prefix="/com/github/XtremeTHN/Lift">
     <file preprocess="xml-stripblanks">window.ui</file>
+    <file preprocess="xml-stripblanks">not-found-page.ui</file>
+    <file preprocess="xml-stripblanks">roms-page.ui</file>
+    <file preprocess="xml-stripblanks">rom.ui</file>
+  </gresource>
+
+  <gresource prefix="/com/github/XtremeTHN/Lift/icons/scalable/actions">
+    <file alias="nintendo-controller-symbolic.svg" preprocess="xml-stripblanks">icons/nintendo-controller-symbolic.svg</file>
+    <file alias="switch-symbolic.svg" preprocess="xml-stripblanks">icons/switch-symbolic.svg</file>
+    <file alias="plus-large-symbolic.svg" preprocess="xml-stripblanks">icons/plus-large-symbolic.svg</file>
+    <file alias="drive-harddisk-usb-symbolic.svg" preprocess="xml-stripblanks">icons/drive-harddisk-usb-symbolic.svg</file>
+    <file alias="image-missing-symbolic.svg" preprocess="xml-stripblanks">icons/image-missing-symbolic.svg</file>
   </gresource>
 </gresources>

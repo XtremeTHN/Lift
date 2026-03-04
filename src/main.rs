@@ -3,9 +3,9 @@ use libadwaita::{Application};
 use std::path::PathBuf;
 
 mod config;
-mod window;
 mod utils;
 mod usb;
+mod ui;
 
 fn main() {
     let env = env_logger::Env::default().filter_or("LIFT_LOG", "info");
@@ -22,7 +22,7 @@ fn main() {
         .build();
 
     _app.connect_activate(move |app| {
-        let win = window::LiftWindow::new(&app);
+        let win = ui::window::LiftWindow::new(&app);
         win.present();
     });
 
