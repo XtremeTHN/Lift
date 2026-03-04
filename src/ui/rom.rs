@@ -1,7 +1,7 @@
 use std::{default, path::Path};
 
 use gtk4::{
-    CompositeTemplate, ListBoxRow, gio::{self, File, prelude::FileExt}, glib::{self, object::Cast}, prelude::WidgetExt, subclass::prelude::*
+    CompositeTemplate, ListBoxRow, gio::{self, File, prelude::FileExt}, glib::{self, object::Cast, variant::ToVariant}, prelude::WidgetExt, subclass::prelude::*
 };
 
 use glib::subclass::InitializingObject;
@@ -62,7 +62,7 @@ glib::wrapper! {
 
 #[gtk4::template_callbacks]
 impl Rom {
-    async fn from_file(&self, file: &Path) {
+    async fn fallback(&self, file: &Path) {
         let f = File::for_path(file);
         let i = f.query_info_future("standard::size,standard::name", gio::FileQueryInfoFlags::NONE, glib::Priority::DEFAULT).await;
         let obj = self.imp();
@@ -82,13 +82,27 @@ impl Rom {
                 obj.rom_title.set_label(&name.to_string_lossy().to_string());
                 obj.rom_size.set_label(&format!("Size: {}", size));
             }
-            
-            Err(err) => {}
+
+            Err(err) => {
+                self.activate_action("win.toast", Some(&err.to_string().to_variant())).expect("couldn't send action");
+            }
         }
     }
-    pub fn from_xci() {}
-    pub fn from_nsp() {
 
+    pub fn from_file(file: &Path) {
+        // file.extension().unwrap();
+    }
+
+    pub fn handle_xci() {
+        gio::spawn_blocking(|| {
+            
+        });
+    }
+
+    pub fn handle_nsp() {
+        gio::spawn_blocking(|| {
+
+        });
     }
 
     #[template_callback]

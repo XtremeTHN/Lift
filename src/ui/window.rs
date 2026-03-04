@@ -17,6 +17,8 @@ use glib::{Object, subclass::InitializingObject};
 // };
 
 mod imp {
+    use gtk4::glib::VariantTy;
+
     use super::*;
     use crate::ui::{not_found_page::NotFoundPage, roms_page::RomsPage};
 
@@ -39,7 +41,16 @@ mod imp {
         fn class_init(klass: &mut Self::Class) {
             NotFoundPage::ensure_type();
             RomsPage::ensure_type();
-            klass.bind_template(); 
+            klass.bind_template();
+
+            klass.install_action("win.toast", Some(VariantTy::STRING), |win, _, arg| {
+                let msg = arg.unwrap().str();
+                if let Some(_msg) = msg {
+                    win.add_toast(_msg);
+                } else {
+                    log::warn!("Toast: Argument was not a string");
+                }
+            });
         }
 
         fn instance_init(obj: &InitializingObject<Self>) {
@@ -73,5 +84,12 @@ glib::wrapper! {
 impl LiftWindow {
     pub fn new(app: &Application) -> Self {
         Object::builder().property("application", app).build()
+    }
+
+    fn add_toast(&self, message: &str) {
+        let obj = self.imp();
+
+        let toast = libadwaita::Toast::new(message);
+        obj.toast.add_toast(toast);
     }
 }
