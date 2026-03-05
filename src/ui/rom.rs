@@ -1,7 +1,18 @@
-use std::{cell::RefCell, fs::File, path::{Path, PathBuf}};
+use std::{
+    cell::RefCell,
+    fs::File,
+    path::{Path, PathBuf},
+};
 
 use gtk4::{
-    CompositeTemplate, ListBoxRow, gio, gdk, glib::{self, Object, object::{Cast, IsA}, variant::ToVariant}, prelude::WidgetExt, subclass::prelude::*
+    CompositeTemplate, ListBoxRow, gdk, gio,
+    glib::{
+        self, Object,
+        object::{Cast, IsA},
+        variant::ToVariant,
+    },
+    prelude::WidgetExt,
+    subclass::prelude::*,
 };
 
 use glib::subclass::InitializingObject;
@@ -61,11 +72,11 @@ glib::wrapper! {
         @implements gtk4::Accessible, gtk4::Actionable, gtk4::Buildable, gtk4::ConstraintTarget;
 }
 
-
 #[gtk4::template_callbacks]
 impl Rom {
     fn send_error(&self, message: &str) {
-        self.activate_action("win.toast", Some(&message.to_string().to_variant())).expect("toast");
+        self.activate_action("win.toast", Some(&message.to_string().to_variant()))
+            .expect("toast");
     }
 
     pub fn new(path: PathBuf) -> Self {
@@ -78,11 +89,17 @@ impl Rom {
         return o;
     }
 
-    fn set_or(&self, widget: &TemplateChild<gtk4::Label>, prefix: String, value: Option<String>, default: &str) {
+    fn set_or(
+        &self,
+        widget: &TemplateChild<gtk4::Label>,
+        prefix: &str,
+        value: &Option<String>,
+        default: &str,
+    ) {
         if let Some(v) = value {
-            widget.set_label(&(prefix + &v));
+            widget.set_label(&format!("{}{}", prefix, v));
         } else {
-            widget.set_label(&(prefix + &default));
+            widget.set_label(&format!("{}{}", prefix, default));
         }
     }
 
@@ -93,17 +110,21 @@ impl Rom {
         gio::spawn_blocking(move || {
             let rom_info = RomInfo::new(path);
             if let Err(e) = rom_info {
-                send.send_blocking((None, Some(e.to_string()))).expect("failed to send data");
+                send.send_blocking((None, Some(e.to_string())))
+                    .expect("failed to send data");
                 return;
             }
 
             let mut unwrapped = rom_info.unwrap();
             if let Err(e) = unwrapped.populate() {
-                send.send_blocking((None, Some(e.to_string()))).expect("failed to send data");
+                send.send_blocking((None, Some(e.to_string())))
+                    .expect("failed to send data");
                 return;
             }
 
-            sender.send_blocking((Some(unwrapped), None)).expect("failed to send data");
+            sender
+                .send_blocking((Some(unwrapped), None))
+                .expect("failed to send data");
         });
 
         match reciever.recv().await {
@@ -117,8 +138,9 @@ impl Rom {
                 let rom_info = info.unwrap();
                 let obj = self.imp();
 
-                self.set_or(&obj.rom_title, String::new(), rom_info.title, "Unknown");
-                self.set_or(&obj.rom_version, String::from("Version: "), rom_info.version, "0.0.0");
+                self.set_or(&obj.rom_title, "", &rom_info.title, "Unknown");
+                self.set_or(&obj.rom_version, "Version: ", &rom_info.version, "0.0.0");
+                self.set_or(&obj.rom_size, "Size: ", &rom_info.size_str().await, "0b");
 
                 if let Some(image_data) = rom_info.image_data {
                     let bytes = glib::Bytes::from(&image_data);
@@ -129,7 +151,10 @@ impl Rom {
                             obj.icon.set_paintable(Some(&t));
                         }
                         Err(e) => {
-                            self.send_error(&format!("Couldn't construct texture: {}", e.to_string()));
+                            self.send_error(&format!(
+                                "Couldn't construct texture: {}",
+                                e.to_string()
+                            ));
                         }
                     }
                 }

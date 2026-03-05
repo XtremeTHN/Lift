@@ -3,11 +3,12 @@ use std::{fs::File, io::{Read, Seek, Write}, path::PathBuf, string::FromUtf8Erro
 use binrw::BinRead;
 use gtk4::{
     gdk::Texture,
+    gio::{self, prelude::FileExt},
     glib
 };
 use positioned_io::ReadAt;
 
-use crate::roms::{formats::{nacp::{Nacp, TitleLanguage}, nca::{ContentType, Nca}}, fs::{pfs::{PFSHeader, PartitionFs, PartitionFsErrors}, romfs::RomFs}, keyring::{Keyring, KeyringErrors}};
+use crate::roms::{formats::{nacp::{Nacp, TitleLanguage}, nca::{ContentType, Nca}, xci::{Xci, XciErrors}}, fs::{pfs::{PFSHeader, PartitionFs, PartitionFsErrors}, romfs::RomFs}, keyring::{Keyring, KeyringErrors}};
 use thiserror::Error;
 
 pub struct RomInfo {
@@ -47,6 +48,8 @@ pub enum FindInfoFilesError {
 
 #[derive(Error, Debug)]
 pub enum HandleError {
+    #[error("Error while parsing xci: {0}")]
+    XciError(#[from] XciErrors),
     #[error("Error while trying to get PFS: {0}")]
     PFSError(#[from] PartitionFsErrors),
     #[error("Error while trying to read stream: {0}")]
@@ -59,6 +62,11 @@ pub enum HandleError {
     DecodingError(#[from] FromUtf8Error)
 }
 
+#[derive(Error, Debug)]
+pub enum SizeError {
+    #[error("Error from glib")]
+    GLibError(#[from] glib::Error)
+}
 impl RomInfo {
     pub fn new(path: PathBuf) -> std::io::Result<Self> {
         let file = File::open(&path)?;
@@ -73,9 +81,25 @@ impl RomInfo {
         })
     }
 
-    pub fn texture_from_bytes(&self, bytes: Vec<u8>) -> Result<Texture, glib::Error> {
-        let bytes = glib::Bytes::from(&bytes);
-        Texture::from_bytes(&bytes)
+    pub async fn size(&self) -> Option<i64> {
+        let f = gio::File::for_path(&self.path);
+
+        let querier = f.query_info_future("standard::size", gio::FileQueryInfoFlags::NONE, glib::Priority::DEFAULT).await;
+        if let Ok(s) = querier {
+            Some(s.size())
+        } else {
+            None
+        }
+    }
+
+    pub async fn size_str(&self) -> Option<String> {
+        let size = self.size().await;
+        if let Some(s) = size {
+            let fmtd = glib::format_size(s.clamp(0, i64::MAX) as u64);
+            Some(fmtd.to_string())
+        } else {
+            None
+        }
     }
 
     fn handle_nacp(&mut self, nacp: Nacp) -> Result<(), FromUtf8Error> {
@@ -155,14 +179,21 @@ impl RomInfo {
     }
 
     fn handle_xci(&mut self) -> Result<(), HandleError> {
-        log::warn!("TODO");
+        let mut xci = Xci::new(&mut self.file)?;
+
+        let mut part = xci.open_partition("secure".to_string(), &self.file)?;
+        let pfs = xci.open_partition_fs(&mut part, &self.file)?;
+        let (nacp, texture) = self.find_info_files(pfs, &mut part)?;
+
+        self.image_data = texture;
+        self.handle_nacp(nacp)?;
 
         Ok(())
     }
 
     fn handle_nsp(&mut self) -> Result<(), HandleError> {
         let pfs = PartitionFs::new_default_header(&mut self.file)?;
-        let (nacp, texture) =self.find_info_files(pfs, &self.file)?;
+        let (nacp, texture) = self.find_info_files(pfs, &self.file)?;
 
         self.image_data = texture;
         self.handle_nacp(nacp)?;
