@@ -19,7 +19,7 @@ pub enum DistributionType {
     GameCard = 0x01,
 }
 
-#[derive(BinRead, Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(BinRead, Debug, Clone, Copy)]
 #[br(repr = u8)]
 pub enum ContentType {
     Program = 0x00,
@@ -87,13 +87,12 @@ pub struct NcaHeader {
 }
 
 #[derive(Debug)]
-pub struct Nca<T: ReadAt> {
+pub struct Nca {
     pub header: NcaHeader,
     pub key_area: KeyArea,
     keyring: Keyring,
 
     pub fs_headers: Vec<FsHeader>,
-    pub stream: T
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -120,8 +119,8 @@ const NCA_HEADER_SIZE: usize = 0x400;
 const NCA_ENCRYPTED_SIZE: usize = 0xC00;
 const NCA_HEADER_SECTION_SIZE: usize = 0x200;
 
-impl<T: ReadAt> Nca<T> {
-    pub fn new(keyring: &Keyring, stream: T) -> Result<Self, NcaErrors> {
+impl Nca {
+    pub fn new<T: ReadAt>(keyring: &Keyring, stream: &mut T) -> Result<Self, NcaErrors> {
         let mut header_buf = vec![0u8; NCA_ENCRYPTED_SIZE];
         stream.read_exact_at(0x0, &mut header_buf)?;
 
@@ -157,7 +156,6 @@ impl<T: ReadAt> Nca<T> {
             keyring: keyring.clone(),
             key_area: Default::default(),
             fs_headers: Default::default(),
-            stream
         };
 
         r.decrypt_key_area(&mut header_buf)?;
@@ -191,7 +189,7 @@ impl<T: ReadAt> Nca<T> {
         }
     }
 
-    fn decrypt_key_area(&mut self, stream: &mut Vec<u8>) -> Result<(), NcaErrors> {
+    fn decrypt_key_area<T: ReadAt>(&mut self, stream: &mut T) -> Result<(), NcaErrors> {
         let mut buf = vec![0u8; 0x40];
 
         stream.read_exact_at(0x300, &mut buf)?;
@@ -212,7 +210,7 @@ impl<T: ReadAt> Nca<T> {
         Ok(())
     }
 
-    fn populate_fs_headers(&mut self, stream: &mut Vec<u8>) -> Result<(), NcaErrors> {
+    fn populate_fs_headers<T: ReadAt>(&mut self, stream: &mut T) -> Result<(), NcaErrors> {
         for section in 0..4 {
             let offset = NCA_HEADER_SIZE + (section * NCA_HEADER_SECTION_SIZE);
             let mut buf = vec![0u8; NCA_HEADER_SECTION_SIZE];
@@ -237,10 +235,11 @@ impl<T: ReadAt> Nca<T> {
         return self.header.fs_entries[header.section as usize];
     }
 
-    pub fn open_fs(
+    pub fn open_fs<T: ReadAt>(
         &mut self,
         header: usize,
-    ) -> Result<EncryptedCtrFileRegion<&T>, NcaErrors> {
+        stream: T,
+    ) -> Result<EncryptedCtrFileRegion<T>, NcaErrors> {
         let header = &self.fs_headers[header];
         let entry = self.get_entry_for_header(&header);
 
@@ -260,7 +259,7 @@ impl<T: ReadAt> Nca<T> {
         }
 
         let r = FileRegion::new(
-            &self.stream,
+            stream,
             fs_offset,
             (entry.end_offset as u64 - fs_offset).into(),
         );

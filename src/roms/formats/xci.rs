@@ -51,32 +51,30 @@ pub enum XciErrors {
 }
 
 #[derive(Debug)]
-pub struct Xci<T: ReadAt + Read + Seek> {
+pub struct Xci {
     pub header: XciHeader,
-    pub root_hfs: PartitionFs<HashPartitionFsHeader, T>,
-    stream: T
+    pub root_hfs: PartitionFs<HashPartitionFsHeader>,
 }
 
-impl<T: ReadAt + Read + Clone + Seek> Xci<T> {
-    pub fn new(mut stream: T) -> Result<Xci<T>, XciErrors> {
-        let h = XciHeader::read(&mut stream)?;
+impl Xci {
+    pub fn new<T: ReadAt + Read + Seek>(stream: &mut T) -> Result<Xci, XciErrors> {
+        let h = XciHeader::read(stream)?;
 
         if h.magic != [72, 69, 65, 68] {
             return Err(XciErrors::InvalidMagic(h.magic));
         }
 
         stream.seek(SeekFrom::Start(h.hfs_header_offset)).unwrap();
-        let hfs_header = HashPartitionFsHeader::read(&mut stream)?;
-        let root_hfs = PartitionFs::<HashPartitionFsHeader, T>::new(hfs_header, stream.clone())?;
+        let hfs_header = HashPartitionFsHeader::read(stream)?;
+        let root_hfs = PartitionFs::<HashPartitionFsHeader>::new(hfs_header)?;
 
         Ok(Self {
             header: h,
             root_hfs,
-            stream: stream
         })
     }
 
-    pub fn open_partition(
+    pub fn open_partition<T: ReadAt + Read + Seek>(
         &mut self,
         partition: String,
         stream: T,
@@ -100,12 +98,13 @@ impl<T: ReadAt + Read + Clone + Seek> Xci<T> {
         Err(XciErrors::PartitionNotFound(partition))
     }
 
-    pub fn open_partition_fs(
+    pub fn open_partition_fs<T: ReadAt + Read + Seek>(
         &mut self,
-        partition: &mut FileRegion<&T>,
-    ) -> Result<PartitionFs<HashPartitionFsHeader, T>, XciErrors> {
+        partition: &mut FileRegion<T>,
+        stream: T,
+    ) -> Result<PartitionFs<HashPartitionFsHeader>, XciErrors> {
         let hfs_header = HashPartitionFsHeader::read(partition)?;
-        let hfs = PartitionFs::<HashPartitionFsHeader, T>::new(hfs_header, self.stream.clone())?;
+        let hfs = PartitionFs::<HashPartitionFsHeader>::new(hfs_header)?;
 
         Ok(hfs)
     }

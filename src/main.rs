@@ -2,6 +2,7 @@ use gtk4::{self, gio, gio::prelude::{ApplicationExt, ApplicationExtManual}, prel
 use libadwaita::{Application};
 use std::path::PathBuf;
 
+mod rom_info;
 mod config;
 mod utils;
 mod roms;

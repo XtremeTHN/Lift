@@ -66,26 +66,24 @@ pub enum RomFsErrors {
 }
 
 #[derive(Debug)]
-pub struct RomFs<T: ReadAt + Read + Seek> {
+pub struct RomFs {
     pub header: RomFsHeader,
     pub files: Vec<RomFsFileEntry>,
-    stream: T
 }
 
-impl<T: ReadAt + Read + Seek> RomFs<T> {
-    pub fn new(mut stream: T) -> Result<Self, RomFsErrors> {
+impl RomFs {
+    pub fn new<T: ReadAt + Read + Seek>(stream: &mut T) -> Result<Self, RomFsErrors> {
         let mut r = RomFs {
-            header: RomFsHeader::read(&mut stream)?,
+            header: RomFsHeader::read(stream)?,
             files: vec![],
-            stream
         };
 
-        r.populate_files()?;
+        r.populate_files(stream)?;
 
         Ok(r)
     }
 
-    fn populate_files(&mut self) -> Result<(), RomFsErrors> {
+    fn populate_files<T: ReadAt>(&mut self, stream: &mut T) -> Result<(), RomFsErrors> {
         let mut sibling: u64 = 0;
 
         loop {
@@ -93,7 +91,7 @@ impl<T: ReadAt + Read + Seek> RomFs<T> {
             let size = self.header.file_meta_table_size - sibling;
             let mut buffer = vec![0u8; size as usize];
 
-            self.stream.read_at(offset, &mut buffer)?;
+            stream.read_at(offset, &mut buffer)?;
 
             let mut cur = Cursor::new(buffer);
             let f = RomFsFileEntry::read(&mut cur)?;
@@ -111,7 +109,7 @@ impl<T: ReadAt + Read + Seek> RomFs<T> {
         return String::from_utf8(entry.name.clone());
     }
 
-    pub fn get_file(&self, file: &RomFsFileEntry) -> FileRegion<&T> {
-        FileRegion::new(&self.stream, self.header.data_offset + file.offset, file.size)
+    pub fn get_file<T: ReadAt>(&self, file: &RomFsFileEntry, stream: T) -> FileRegion<T> {
+        FileRegion::new(stream, self.header.data_offset + file.offset, file.size)
     }
 }

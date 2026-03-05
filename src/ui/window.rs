@@ -8,6 +8,9 @@ use gtk4::{
 };
 use libadwaita::{Application, ApplicationWindow, subclass::prelude::*};
 use glib::{Object, subclass::InitializingObject};
+use ashpd::desktop::usb::{UsbEventAction, UsbProxy};
+use futures_util::StreamExt;
+use std::cell::RefCell;
 
 // use std::{
 //     borrow::Borrow,
@@ -28,7 +31,9 @@ mod imp {
         #[template_child]
         pub toast: TemplateChild<libadwaita::ToastOverlay>,
         #[template_child]
-        pub navigation: TemplateChild<libadwaita::NavigationView>
+        pub navigation: TemplateChild<libadwaita::NavigationView>,
+
+        pub switch_id: RefCell<String>,
     }
 
     #[glib::object_subclass]
@@ -61,6 +66,8 @@ mod imp {
     impl ObjectImpl for LiftWindow {
         fn constructed(&self) {
             self.parent_constructed();
+
+            self.obj().setup_usb_finder();
         }
     }
 
@@ -84,6 +91,50 @@ glib::wrapper! {
 impl LiftWindow {
     pub fn new(app: &Application) -> Self {
         Object::builder().property("application", app).build()
+    }
+
+    async fn setup_finder(&self) {
+        let obj = self.imp();
+        let proxy = UsbProxy::new().await.expect("err");
+        let _ = proxy.create_session(Default::default()).await.expect("err");
+
+        let mut stream = proxy.receive_device_events().await.expect("ERRS");
+
+        while let Some(event) = stream.next().await {
+            let events = event.events();
+
+            for x in events {
+                log::debug!("setup_finder(): Event {:#?}", x);
+                match x.action() {
+                    UsbEventAction::Add => {
+                        if x.device().vendor().unwrap_or(String::new()) != "Nintendo Co., Ltd" {
+                            continue;
+                        }
+
+                        *obj.switch_id.borrow_mut() = x.device_id().to_string();
+                        self.add_toast("Switch connected");
+                        obj.navigation.push_by_tag("roms-page");
+                    }
+                    UsbEventAction::Remove => {
+                        if x.device_id().as_str() != obj.switch_id.borrow().as_str() {
+                            continue;
+                        }
+                        self.add_toast("Switch disconnected");
+                        obj.navigation.pop_to_tag("switch-not-found");
+                    }
+                    _ => {
+                        continue;
+                    }
+                }
+            }
+        }
+    }
+
+    fn setup_usb_finder(&self) {
+        let obj = self.clone();
+        glib::MainContext::default().spawn_local(async move {
+            obj.setup_finder().await;
+        });
     }
 
     fn add_toast(&self, message: &str) {

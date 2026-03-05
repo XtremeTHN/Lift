@@ -8,7 +8,7 @@ fn strip(bytes: &mut Vec<u8>) {
     bytes.retain(|&b| b != 0x00);
 }
 
-#[derive(BinRead, PartialEq, Eq)]
+#[derive(BinRead, PartialEq, Eq, Clone, Copy)]
 #[br(repr(u8))]
 #[br(little)]
 pub enum TitleLanguage {
@@ -56,11 +56,11 @@ impl Title {
 #[derive(BinRead, Debug)]
 #[br(little)]
 pub struct Nacp {
-    #[br(count = 0x10, seek_before = std::io::SeekFrom::Start(0x3060))]
-    pub raw_version: Vec<u8>,
-
     #[br(count = 16)]
     pub titles: Vec<Title>,
+    
+    #[br(count = 0x10, seek_before = std::io::SeekFrom::Start(0x3060))]
+    pub raw_version: Vec<u8>,
 }
 
 impl Nacp {
