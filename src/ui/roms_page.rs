@@ -1,8 +1,12 @@
 use gtk4::{
-    CompositeTemplate, glib, prelude::WidgetExt, subclass::prelude::*
+    CompositeTemplate, gio::{self, prelude::{FileExt, ListModelExtManual}}, glib::{self, object::Cast, variant::ToVariant}, prelude::WidgetExt, subclass::prelude::*
+
 };
+
 use libadwaita::{NavigationPage, subclass::prelude::*};
 use glib::subclass::InitializingObject;
+
+use crate::ui::rom::Rom;
 
 mod imp {
     use super::*;
@@ -39,6 +43,10 @@ mod imp {
             klass.install_action_async("clear-all", None, async |page, _, _| {
                 page.clear_all().await;
             });
+
+            klass.install_action_async("open", None, async |page, _, _| {
+                page.open_rom().await;
+            });
         }
 
         fn instance_init(obj: &InitializingObject<Self>) {
@@ -58,6 +66,55 @@ glib::wrapper! {
 }
 
 impl RomsPage {
+    async fn open_rom(&self) {
+        let filter = gtk4::FileFilter::new();
+        filter.add_suffix("xci");
+        filter.add_suffix("nsp");
+
+        let diag = gtk4::FileDialog::builder()
+                .accept_label("Open")
+                .default_filter(&filter)
+                .build();
+
+        // self.parent()
+        let r = self.root().unwrap();
+        let wrapped_cast = r.downcast::<gtk4::Window>();
+        if let Err(e) = wrapped_cast {
+            self.activate_action("win.toast", Some(&"Couldn't get window".to_variant()));
+            return;
+        }
+        
+        let cast = wrapped_cast.unwrap();
+        let res = diag.open_multiple_future(Some(&cast)).await;
+
+        if let Err(e) = res {
+            self.activate_action("win.toast", Some(&format!("Couldn't get opened files: {}", e.to_string()).to_variant()));
+            return;
+        }          
+
+        let files = res.unwrap();
+
+        let iter = files.iter::<gio::File>();
+        let obj = self.imp();
+        for x in iter {
+            match x {
+                Ok(f) => {
+                    let row = Rom::new();
+                    let path = f.path();
+
+                    if path.is_none() {
+                        return;
+                    }
+
+                    row.populate_from_file(path.unwrap());
+
+                    obj.list_box.append(&row);
+                }
+                Err(e) => {}
+            }
+        }
+    }
+    
     async fn clear_all(&self) {
         let obj = self.imp();
         while let Some(child) = obj.list_box.first_child() {

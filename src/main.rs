@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 mod config;
 mod utils;
+mod roms;
 mod usb;
 mod ui;
 
