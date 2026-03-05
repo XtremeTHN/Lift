@@ -1,5 +1,7 @@
 use std::sync::LazyLock;
 
+use gtk4::{glib::{object::IsA, variant::ToVariant}, prelude::WidgetExt};
+
 pub static RUNTIME: LazyLock<tokio::runtime::Runtime> =
     LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
 
@@ -15,4 +17,10 @@ where
         sender.send(response)
     });
     receiver.await.unwrap()
+}
+
+
+pub fn send_error<W: IsA<gtk4::Widget>>(widget: &W, message: &str) {
+    widget.activate_action("win.toast", Some(&message.to_string().to_variant()))
+        .expect("toast");
 }

@@ -12,7 +12,7 @@ use gtk4::{
 use glib::subclass::InitializingObject;
 use libadwaita::{NavigationPage, subclass::prelude::*};
 
-use crate::ui::rom::Rom;
+use crate::{ui::rom::Rom, utils::send_error};
 
 mod imp {
     use std::cell::RefCell;
@@ -92,9 +92,8 @@ impl RomsPage {
 
         let r = self.root().unwrap();
         let wrapped_cast = r.downcast::<gtk4::Window>();
-        if let Err(e) = wrapped_cast {
-            self.activate_action("win.toast", Some(&"Couldn't get window".to_variant()))
-                .expect("failed");
+        if let Err(_) = wrapped_cast {
+            send_error(self, "Couldn't get window");
             return;
         }
 
@@ -102,12 +101,10 @@ impl RomsPage {
         let res = diag.open_multiple_future(Some(&cast)).await;
 
         if let Err(e) = res {
-            self.activate_action(
-                "win.toast",
-                Some(&format!("Couldn't get opened files: {}", e.to_string()).to_variant()),
-            )
-            .expect("failed");
-
+            if e.to_string() == "Dismissed by user" {
+                return;
+            }
+            send_error(self, &format!("Couldn't get opened files: {}", e.to_string()));
             return;
         }
 

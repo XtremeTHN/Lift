@@ -18,7 +18,7 @@ use gtk4::{
 
 use glib::subclass::InitializingObject;
 
-use crate::{rom_info::RomInfo, roms::formats::nacp::Nacp};
+use crate::{utils::send_error, rom_info::RomInfo, roms::formats::nacp::Nacp};
 
 mod imp {
     use super::*;
@@ -75,11 +75,6 @@ glib::wrapper! {
 
 #[gtk4::template_callbacks]
 impl Rom {
-    fn send_error(&self, message: &str) {
-        self.activate_action("win.toast", Some(&message.to_string().to_variant()))
-            .expect("toast");
-    }
-
     pub fn new(path: PathBuf) -> Self {
         let o: Rom = Object::builder().build();
 
@@ -159,7 +154,7 @@ impl Rom {
         match reciever.recv().await {
             Ok((info, error)) => {
                 if !error.is_none() {
-                    self.send_error(&error.unwrap());
+                    send_error(self, &error.unwrap());
                     self.set_default_data(path).await;
                     return;
                 }
@@ -184,7 +179,7 @@ impl Rom {
                             obj.icon.set_paintable(Some(&t));
                         }
                         Err(e) => {
-                            self.send_error(&format!(
+                            send_error(self, &format!(
                                 "Couldn't construct texture: {}",
                                 e.to_string()
                             ));
@@ -195,7 +190,7 @@ impl Rom {
                 // TODO: handle image fallback
             }
             Err(e) => {
-                self.send_error(&e.to_string());
+                send_error(self, &e.to_string());
                 self.set_default_data(path).await;
             }
         };
