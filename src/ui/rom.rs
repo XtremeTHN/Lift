@@ -1,24 +1,19 @@
-use std::{
-    cell::RefCell,
-    fs::File,
-    path::{Path, PathBuf},
-};
+use std::{cell::RefCell, path::PathBuf};
 
 use gtk4::{
     CompositeTemplate, ListBoxRow, gdk,
-    gio::{self, prelude::FileExt},
-    glib::{
-        self, Object,
-        object::{Cast, IsA},
-        variant::ToVariant,
+    gio::{
+        self, ListStore,
+        prelude::{FileExt, ListModelExt},
     },
-    prelude::{FrameExt, WidgetExt},
+    glib::{self, Object, object::Cast},
+    prelude::FrameExt,
     subclass::prelude::*,
 };
 
 use glib::subclass::InitializingObject;
 
-use crate::{utils::send_error, rom_info::RomInfo, roms::formats::nacp::Nacp};
+use crate::{rom_info::RomInfo, utils::send_error};
 
 mod imp {
     use super::*;
@@ -43,6 +38,9 @@ mod imp {
 
         #[template_child]
         pub end_button_image: TemplateChild<gtk4::Image>,
+
+        pub file: RefCell<Option<gio::File>>,
+        pub store: RefCell<Option<ListStore>>,
     }
 
     #[glib::object_subclass]
@@ -75,14 +73,26 @@ glib::wrapper! {
 
 #[gtk4::template_callbacks]
 impl Rom {
-    pub fn new(path: PathBuf) -> Self {
-        let o: Rom = Object::builder().build();
+    pub fn new() -> Self {
+        Object::builder().build()
+    }
 
-        let c = o.clone();
+    pub fn set_store(&self, store: Option<ListStore>) {
+        self.imp().store.replace(store);
+    }
+
+    pub fn set_file(&self, file: Option<gio::File>) {
+        self.imp().file.replace(file);
+    }
+
+    pub fn populate_sync(&self) {
+        let obj = self.clone();
         glib::MainContext::default().spawn_local(async move {
-            c.populate(path).await;
+            let imp = obj.imp();
+            if let Some(p) = imp.file.borrow().as_ref().unwrap().path() {
+                obj.populate(p).await;
+            }
         });
-        return o;
     }
 
     fn set_or(
@@ -125,7 +135,7 @@ impl Rom {
         }
     }
 
-    async fn populate(&self, path: PathBuf) {
+    pub async fn populate(&self, path: PathBuf) {
         let (sender, reciever) = async_channel::bounded::<(Option<RomInfo>, Option<String>)>(1);
 
         let send = sender.clone();
@@ -179,10 +189,10 @@ impl Rom {
                             obj.icon.set_paintable(Some(&t));
                         }
                         Err(e) => {
-                            send_error(self, &format!(
-                                "Couldn't construct texture: {}",
-                                e.to_string()
-                            ));
+                            send_error(
+                                self,
+                                &format!("Couldn't construct texture: {}", e.to_string()),
+                            );
                         }
                     }
                 }
@@ -218,9 +228,19 @@ impl Rom {
 
     #[template_callback]
     fn remove_rom(&self, _: &gtk4::Button) {
-        if let Some(parent) = self.parent() {
-            if let Ok(listbox) = parent.downcast::<gtk4::ListBox>() {
-                listbox.remove(self);
+        let imp = self.imp();
+
+        let wrapped_file = imp.file.borrow();
+        let f = wrapped_file.as_ref().unwrap();
+        let wrapped_store = imp.store.borrow();
+        let s = wrapped_store.as_ref().unwrap();
+
+        for i in 0..s.clone().n_items() {
+            if let Some(item) = s.item(i) {
+                if item.downcast_ref::<gio::File>() == Some(f) {
+                    s.remove(i);
+                    break;
+                }
             }
         }
     }

@@ -1,10 +1,9 @@
 use gtk4::{
     CompositeTemplate,
     gio::{
-        self,
-        prelude::{FileExt, ListModelExt, ListModelExtManual},
+        self, ListModel, prelude::{FileExt, ListModelExt, ListModelExtManual}
     },
-    glib::{self, object::{Cast, CastNone, ObjectExt}, variant::ToVariant},
+    glib::{self, Object, object::{Cast, CastNone, ObjectExt}, variant::ToVariant},
     prelude::WidgetExt,
     subclass::prelude::*,
 };
@@ -12,9 +11,12 @@ use gtk4::{
 use glib::subclass::InitializingObject;
 use libadwaita::{NavigationPage, subclass::prelude::*};
 
+use gtk4::glib::types::StaticType;
 use crate::{ui::rom::Rom, utils::send_error};
 
 mod imp {
+
+    use gtk4::gio::ListStore;
     use std::cell::RefCell;
 
     use super::*;
@@ -36,6 +38,8 @@ mod imp {
 
         #[template_child]
         pub list_box: TemplateChild<gtk4::ListBox>,
+
+        pub store: RefCell<Option<ListStore>>
     }
 
     #[glib::object_subclass]
@@ -59,14 +63,14 @@ mod imp {
 
         fn instance_init(obj: &InitializingObject<Self>) {
             obj.init_template();
-
-            // obj.setup
         }
     }
 
     impl ObjectImpl for RomsPage {
         fn constructed(&self) {
             self.parent_constructed();
+
+            self.obj().setup_list();
         }
     }
     impl WidgetImpl for RomsPage {}
@@ -80,6 +84,35 @@ glib::wrapper! {
 }
 
 impl RomsPage {
+    fn setup_list(&self) {
+        let store = gio::ListStore::with_type(gio::File::static_type());
+
+        let obj = self.clone();
+        let imp = self.imp();
+
+        imp.store.replace(Some(store.clone()));
+
+        let _obj = obj.clone();
+        imp.list_box.bind_model(Some(&store), move |object| {
+            let f = object.clone().downcast::<gio::File>();
+            let imp = _obj.imp();
+
+            let rom = Rom::new();
+            rom.set_file(Some(f.unwrap()));
+            rom.set_store(Some(imp.store.borrow().clone().unwrap()));
+            rom.populate_sync();
+
+            rom.upcast::<gtk4::Widget>()
+        });
+
+        let s = store.clone();
+        store.connect_closure("items-changed", true, glib::closure_local!(move |_: ListModel, _: u32, removed: u32, _: u32| {
+            if removed > 0 && s.n_items() == 0 {
+                obj.imp().stack.set_visible_child_name("placeholder");
+            }
+        }));
+    }
+
     async fn open_rom(&self) {
         let filter = gtk4::FileFilter::new();
         filter.add_suffix("xci");
@@ -109,7 +142,6 @@ impl RomsPage {
         }
 
         let files = res.unwrap();
-        println!("{}", files.n_items());
 
         let obj = self.imp();
         for i in 0..files.n_items() {
@@ -121,17 +153,15 @@ impl RomsPage {
                     if path.is_none() {
                         return;
                     }
-                    
-                    let row = Rom::new(path.unwrap());
-                    obj.list_box.append(&row);
+
+                    obj.store.borrow().clone().unwrap().append(&f);
+                    obj.stack.set_visible_child_name("roms");
                 }
                 None => {
                     log::error!("File is None");
                 }
             }
         }
-
-        obj.stack.set_visible_child_name("roms");
     }
 
     async fn clear_all(&self) {
@@ -139,5 +169,7 @@ impl RomsPage {
         while let Some(child) = obj.list_box.first_child() {
             obj.list_box.remove(&child);
         }
+
+        obj.stack.set_visible_child_name("placeholder");
     }
 }
