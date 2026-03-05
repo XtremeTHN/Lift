@@ -5,13 +5,14 @@ use std::{
 };
 
 use gtk4::{
-    CompositeTemplate, ListBoxRow, gdk, gio,
+    CompositeTemplate, ListBoxRow, gdk,
+    gio::{self, prelude::FileExt},
     glib::{
         self, Object,
         object::{Cast, IsA},
         variant::ToVariant,
     },
-    prelude::WidgetExt,
+    prelude::{FrameExt, WidgetExt},
     subclass::prelude::*,
 };
 
@@ -103,12 +104,39 @@ impl Rom {
         }
     }
 
+    fn format_size(&self, size: Option<i64>) -> Option<String> {
+        if let Some(s) = size {
+            let fmtd = glib::format_size(s.clamp(0, i64::MAX) as u64);
+            Some(fmtd.to_string())
+        } else {
+            None
+        }
+    }
+
+    pub async fn size(&self, path: &PathBuf) -> Option<i64> {
+        let f = gio::File::for_path(&path);
+
+        let querier = f
+            .query_info_future(
+                "standard::size",
+                gio::FileQueryInfoFlags::NONE,
+                glib::Priority::DEFAULT,
+            )
+            .await;
+        if let Ok(s) = querier {
+            Some(s.size())
+        } else {
+            None
+        }
+    }
+
     async fn populate(&self, path: PathBuf) {
         let (sender, reciever) = async_channel::bounded::<(Option<RomInfo>, Option<String>)>(1);
 
         let send = sender.clone();
+        let _path = path.clone();
         gio::spawn_blocking(move || {
-            let rom_info = RomInfo::new(path);
+            let rom_info = RomInfo::new(_path);
             if let Err(e) = rom_info {
                 send.send_blocking((None, Some(e.to_string())))
                     .expect("failed to send data");
@@ -127,20 +155,25 @@ impl Rom {
                 .expect("failed to send data");
         });
 
+        let obj = self.imp();
         match reciever.recv().await {
             Ok((info, error)) => {
                 if !error.is_none() {
                     self.send_error(&error.unwrap());
-                    // TODO: handle fallback
+                    self.set_default_data(path).await;
                     return;
                 }
 
                 let rom_info = info.unwrap();
-                let obj = self.imp();
 
                 self.set_or(&obj.rom_title, "", &rom_info.title, "Unknown");
                 self.set_or(&obj.rom_version, "Version: ", &rom_info.version, "0.0.0");
-                self.set_or(&obj.rom_size, "Size: ", &rom_info.size_str().await, "0b");
+                self.set_or(
+                    &obj.rom_size,
+                    "Size: ",
+                    &self.format_size(self.size(&path).await),
+                    "0b",
+                );
 
                 if let Some(image_data) = rom_info.image_data {
                     let bytes = glib::Bytes::from(&image_data);
@@ -163,8 +196,29 @@ impl Rom {
             }
             Err(e) => {
                 self.send_error(&e.to_string());
+                self.set_default_data(path).await;
             }
         };
+    }
+
+    async fn set_default_data(&self, path: PathBuf) {
+        let obj = self.imp();
+        obj.rom_title
+            .set_label(&path.file_name().unwrap().to_string_lossy().to_string());
+        obj.rom_version.set_label("Version: 0.0.0");
+
+        let img = gtk4::Image::builder()
+            .icon_name("image-missing-symbolic")
+            .pixel_size(60)
+            .build();
+        obj.frame.set_child(Some(&img));
+
+        self.set_or(
+            &obj.rom_size,
+            "Size: ",
+            &self.format_size(self.size(&path).await),
+            "0b",
+        );
     }
 
     #[template_callback]

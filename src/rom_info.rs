@@ -8,17 +8,8 @@ use gtk4::{
 };
 use positioned_io::ReadAt;
 
-use crate::roms::{formats::{nacp::{Nacp, TitleLanguage}, nca::{ContentType, Nca}, xci::{Xci, XciErrors}}, fs::{pfs::{PFSHeader, PartitionFs, PartitionFsErrors}, romfs::RomFs}, keyring::{Keyring, KeyringErrors}};
+use crate::roms::{formats::{nacp::{Nacp, TitleLanguage}, nca::{ContentType, Nca, NcaErrors}, xci::{Xci, XciErrors}}, fs::{pfs::{PFSHeader, PartitionFs, PartitionFsErrors}, romfs::RomFs}, keyring::{Keyring, KeyringErrors}};
 use thiserror::Error;
-
-pub struct RomInfo {
-    pub title: Option<String>,
-    pub version: Option<String>,
-    pub image_data: Option<Vec<u8>>,
-    pub language: TitleLanguage,
-    file: File,
-    path: PathBuf,
-}
 
 #[derive(Error, Debug)]
 pub enum PopulateError {
@@ -38,6 +29,8 @@ pub enum FindInfoFilesError {
     DecodingError(#[from] FromUtf8Error),
     #[error("File in romfs has no extension: {0}")]
     NoExtension(String),
+    #[error("Couldn't parse nca: {0}")]
+    NcaError(#[from] NcaErrors),
     #[error("Couldn't construct Nacp: {0}")]
     NacpError(#[from] binrw::Error),
     #[error("Error while reading entry: {0}")]
@@ -62,11 +55,15 @@ pub enum HandleError {
     DecodingError(#[from] FromUtf8Error)
 }
 
-#[derive(Error, Debug)]
-pub enum SizeError {
-    #[error("Error from glib")]
-    GLibError(#[from] glib::Error)
+pub struct RomInfo {
+    pub title: Option<String>,
+    pub version: Option<String>,
+    pub image_data: Option<Vec<u8>>,
+    pub language: TitleLanguage,
+    file: File,
+    path: PathBuf,
 }
+
 impl RomInfo {
     pub fn new(path: PathBuf) -> std::io::Result<Self> {
         let file = File::open(&path)?;
@@ -79,27 +76,6 @@ impl RomInfo {
             file,
             path,
         })
-    }
-
-    pub async fn size(&self) -> Option<i64> {
-        let f = gio::File::for_path(&self.path);
-
-        let querier = f.query_info_future("standard::size", gio::FileQueryInfoFlags::NONE, glib::Priority::DEFAULT).await;
-        if let Ok(s) = querier {
-            Some(s.size())
-        } else {
-            None
-        }
-    }
-
-    pub async fn size_str(&self) -> Option<String> {
-        let size = self.size().await;
-        if let Some(s) = size {
-            let fmtd = glib::format_size(s.clamp(0, i64::MAX) as u64);
-            Some(fmtd.to_string())
-        } else {
-            None
-        }
     }
 
     fn handle_nacp(&mut self, nacp: Nacp) -> Result<(), FromUtf8Error> {
@@ -135,7 +111,7 @@ impl RomInfo {
             match nca.header.content_type {
                 ContentType::Control => {
                     log::info!("found control nca at index {}: {}", index, name);
-                    let mut fs = nca.open_fs(0, &mut r).expect("err");
+                    let mut fs = nca.open_fs(0, &mut r)?;
                     let rom_fs = RomFs::new(&mut fs).expect("err");
 
                     let mut nacp: Option<Nacp> = None;
