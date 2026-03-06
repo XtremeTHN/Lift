@@ -21,20 +21,11 @@ pub enum ProtocolError {
     SwitchNotFound(),
 }
 
+#[repr(u32)]
 enum ProtocolCommand {
-    Exit,
-    FileRange,
-    FileRangePadded,
-}
-
-impl ProtocolCommand {
-    pub fn to_u32(self) -> u32 {
-        match self {
-            Self::Exit => 0,
-            Self::FileRange => 1,
-            Self::FileRangePadded => 2,
-        }
-    }
+    Exit = 1,
+    FileRange = 2,
+    FileRangePadded = 3,
 }
 
 impl TryFrom<u32> for ProtocolCommand {
@@ -242,7 +233,7 @@ impl SwitchProtocol {
         self.write("TUC0".as_bytes())?;
         self.write(&vec![1])?;
         self.write(&vec![0u8; 0x3])?; // padding 1
-        self.write(&cmd_id.to_u32().to_le_bytes())?;
+        self.write(&(cmd_id as u32).to_le_bytes())?;
         self.write(&data_size.to_le_bytes())?;
         self.write(&vec![0u8; 0xC])?; // padding 2
 
