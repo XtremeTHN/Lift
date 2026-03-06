@@ -109,6 +109,7 @@ impl RomsPage {
         store.connect_closure("items-changed", true, glib::closure_local!(move |_: ListModel, _: u32, removed: u32, _: u32| {
             if removed > 0 && s.n_items() == 0 {
                 obj.imp().stack.set_visible_child_name("placeholder");
+                obj.action_set_enabled("clear-all", false);
             }
         }));
     }
@@ -156,6 +157,7 @@ impl RomsPage {
 
                     obj.store.borrow().clone().unwrap().append(&f);
                     obj.stack.set_visible_child_name("roms");
+                    self.action_set_enabled("clear-all", true);
                 }
                 None => {
                     log::error!("File is None");
@@ -166,10 +168,7 @@ impl RomsPage {
 
     async fn clear_all(&self) {
         let obj = self.imp();
-        while let Some(child) = obj.list_box.first_child() {
-            obj.list_box.remove(&child);
-        }
-
+        obj.store.borrow().clone().unwrap().remove_all();
         obj.stack.set_visible_child_name("placeholder");
     }
 }
