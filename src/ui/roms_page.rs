@@ -17,7 +17,7 @@ use crate::{ui::rom::Rom, utils::send_error};
 mod imp {
 
     use gtk4::gio::ListStore;
-    use std::cell::RefCell;
+    use std::cell::{OnceCell, RefCell};
 
     use super::*;
 
@@ -39,7 +39,7 @@ mod imp {
         #[template_child]
         pub list_box: TemplateChild<gtk4::ListBox>,
 
-        pub store: RefCell<Option<ListStore>>
+        pub store: OnceCell<ListStore>
     }
 
     #[glib::object_subclass]
@@ -70,6 +70,7 @@ mod imp {
         fn constructed(&self) {
             self.parent_constructed();
 
+            self.store.set(gio::ListStore::with_type(gio::File::static_type())).unwrap();
             self.obj().setup_list();
         }
     }
@@ -85,21 +86,19 @@ glib::wrapper! {
 
 impl RomsPage {
     fn setup_list(&self) {
-        let store = gio::ListStore::with_type(gio::File::static_type());
-
         let obj = self.clone();
         let imp = self.imp();
 
-        imp.store.replace(Some(store.clone()));
+        let store = imp.store.get().unwrap();
 
         let _obj = obj.clone();
-        imp.list_box.bind_model(Some(&store), move |object| {
+        imp.list_box.bind_model(Some(store), move |object| {
             let f = object.clone().downcast::<gio::File>();
             let imp = _obj.imp();
 
             let rom = Rom::new();
             rom.set_file(Some(f.unwrap()));
-            rom.set_store(Some(imp.store.borrow().clone().unwrap()));
+            rom.set_store(Some(imp.store.get().unwrap().clone()));
             rom.populate_sync();
 
             rom.upcast::<gtk4::Widget>()
@@ -155,7 +154,7 @@ impl RomsPage {
                         return;
                     }
 
-                    obj.store.borrow().clone().unwrap().append(&f);
+                    obj.store.get().unwrap().append(&f);
                     obj.stack.set_visible_child_name("roms");
                     self.action_set_enabled("clear-all", true);
                 }
@@ -168,7 +167,7 @@ impl RomsPage {
 
     async fn clear_all(&self) {
         let obj = self.imp();
-        obj.store.borrow().clone().unwrap().remove_all();
+        obj.store.get().unwrap().remove_all();
         obj.stack.set_visible_child_name("placeholder");
     }
 }
