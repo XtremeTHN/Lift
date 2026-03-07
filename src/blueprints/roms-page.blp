@@ -39,8 +39,9 @@ template $RomsPage: Adw.NavigationPage {
                     Label info_label {
                         halign: start;
                     }
-
-                    ProgressBar total_progress {}
+                    ProgressBar total_progress {
+                        pulse-step: 0.005;
+                    }
                 };
             }
 

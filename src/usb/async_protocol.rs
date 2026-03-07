@@ -126,14 +126,24 @@ impl SwitchProtocol {
 
         Ok(())
     }
+    async fn send_exit(&mut self) -> ProtocolResult<()> {
+        if let Some(old) = &self.daemon_sender {
+            let (sender, reciever) = async_channel::bounded(1);
+            old.send(UsbCommand::Exit(sender)).await?;
+            reciever.recv().await??;
+        }
+
+        self.daemon_sender = None;
+        Ok(())
+    }
 
     /// Handles the commands sent by the switch
     /// Call find_switch() before using this function
     /// Send the roms before using this function
-    pub async fn poll_commands(&self, sender: Sender<UsbOperation>) -> ProtocolResult<()> {
+    pub async fn poll_commands(&mut self, sender: Sender<UsbOperation>) -> ProtocolResult<()> {
         loop {
             sender.send(UsbOperation::Wait).await;
-            let header = self.read_with_timeout(0x20, 10).await?;
+            let header = self.read_with_timeout(0x20, 0).await?;
 
             let magic = String::from_utf8(header[0..4].to_vec())?;
             if magic != "TUC0" {
@@ -145,6 +155,7 @@ impl SwitchProtocol {
                 Ok(ProtocolCommand::Exit) => {
                     info!("Exit recieved");
                     sender.send(UsbOperation::Exit).await;
+                    self.send_exit().await?;
                     break;
                 }
                 Ok(ProtocolCommand::FileRange) => {
@@ -166,14 +177,12 @@ impl SwitchProtocol {
     }
 
     async fn spawn_usb(&mut self, handle: DeviceHandle<Context>) -> ProtocolResult<()> {
-        if let Some(old) = &self.daemon_sender {
-            old.send(UsbCommand::Exit).await?;
-        }
+        self.send_exit().await?;
 
         let dev = handle.device();
         let (in_endpoint, out_endpoint, interface) = self.find_endpoints(dev.active_config_descriptor()?)?;
         handle.claim_interface(interface)?;
-        let sender = spawn_daemon(handle, in_endpoint, out_endpoint);
+        let sender = spawn_daemon(handle, in_endpoint, out_endpoint, interface);
         self.daemon_sender = Some(sender);
 
         Ok(())
@@ -310,5 +319,19 @@ impl SwitchProtocol {
         }
 
         Ok(())
+    }
+}
+
+impl Drop for SwitchProtocol {
+    fn drop(&mut self) {
+        if let Some(e) = &self.daemon_sender {
+            let (sender, reciever) = async_channel::bounded(1);
+            if let Err(e) = e.send_blocking(UsbCommand::Exit(sender)) {
+                log::error!("usb daemon couldn't exit: {:?}", e);
+                return;
+            }
+            
+            let _ = reciever.recv_blocking().expect("failed to exit the daemon");
+        }
     }
 }

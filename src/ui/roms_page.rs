@@ -1,6 +1,6 @@
 use std::os::fd::AsRawFd;
 
-use ashpd::{WindowIdentifier, desktop::usb::{Device, DeviceID, UsbProxy}};
+use ashpd::{WindowIdentifier, desktop::usb::{Device, DeviceID, UsbError, UsbProxy}, zvariant::OwnedFd};
 use async_channel::Receiver;
 use gtk4::{
     CompositeTemplate,
@@ -8,19 +8,20 @@ use gtk4::{
         self, ListModel, prelude::{FileExt, ListModelExt}
     },
     glib::{self, object::{Cast, CastNone, ObjectExt}},
-    prelude::WidgetExt,
+    prelude::{WidgetExt, WidgetExtManual},
     subclass::prelude::*,
 };
 
 use glib::subclass::InitializingObject;
 use libadwaita::{NavigationPage, subclass::prelude::*};
 
+
 use gtk4::glib::types::StaticType;
 use crate::{ui::rom::Rom, usb::{self, async_protocol::{SwitchProtocol, UsbOperation}}, utils::send_error};
 
 mod imp {
 
-    use gtk4::gio::ListStore;
+    use gtk4::{gio::ListStore, glib::SourceId};
     use std::cell::{OnceCell, RefCell};
 
     use super::*;
@@ -46,6 +47,9 @@ mod imp {
         pub store: OnceCell<ListStore>,
 
         pub switch_id: RefCell<Option<DeviceID>>,
+        pub pulse_id: RefCell<Option<SourceId>>,
+        pub total_size: RefCell<u64>,
+        pub sent_bytes: RefCell<u64>,
     }
 
     #[glib::object_subclass]
@@ -130,7 +134,11 @@ impl RomsPage {
             let rom = Rom::new();
             rom.set_file(Some(f.unwrap()));
             rom.set_store(Some(imp.store.get().unwrap().clone()));
-            rom.populate_sync();
+
+            let r = rom.clone();
+            glib::MainContext::default().spawn_local(async move {
+                r.populate().await;
+            });
 
             rom.upcast::<gtk4::Widget>()
         });
@@ -251,6 +259,12 @@ impl RomsPage {
 
     fn reset_state(&self) {
         let imp = self.imp();
+        self.set_pulse(false);
+        imp.rev.set_reveal_child(false);
+        imp.total_progress.set_fraction(0.0);
+        imp.total_size.replace(0);
+        imp.sent_bytes.replace(0);
+        self.action_set_enabled("upload", true);
         self.iterate_store(|_, index| {
             let wrapped_row = imp.list_box.row_at_index(index as i32);
             if let Some(row) = wrapped_row && let Ok(rom) = row.downcast::<Rom>() {
@@ -260,31 +274,68 @@ impl RomsPage {
         });
     }
     
+    fn set_pulse(&self, pulse: bool) {
+        let imp = self.imp();
+        if pulse {
+            let obj = self.clone();
+            let t = glib::timeout_add_seconds_local(1, move || {
+                obj.imp().total_progress.pulse();
+                glib::ControlFlow::Continue
+            });
+
+            imp.pulse_id.replace(Some(t));
+        } else {
+            let old = imp.pulse_id.replace(None);
+            if let Some(id) = old {
+                id.remove();
+            }
+        }
+    }
+
+    fn add_progress(&self, bytes: u64) {
+        let imp = self.imp();
+
+        let sent = imp.sent_bytes.replace_with(|old| *old + bytes);
+        let total = *imp.total_size.borrow();
+
+        if total > 0 {
+            imp.total_progress.set_fraction(sent as f64 / total as f64);
+        }
+    }
+    
     fn recieve_callbacks(&self, reciever: Receiver<UsbOperation>) {
         let obj = self.clone();
         glib::MainContext::default().spawn_local(async move {
+            let imp = obj.imp();
+            imp.rev.set_reveal_child(true);
+
             while let Some(msg) = reciever.recv().await.iter().next() {
                 match msg {
                     UsbOperation::File(name, read) => {
+                        obj.set_pulse(false);
                         let r = obj.get_rom(name);
 
                         if let Some(r) = r {
                             r.set_show_progress_bar(true);
-                            r.set_progress(*read);
+                            r.add_progress(*read);
+                            obj.add_progress(*read);
                         }
                     }
                     UsbOperation::Wait => {
-                        println!("Waiting for command");
+                        imp.info_label.set_label("Waiting for command...");
+                        obj.set_pulse(true);
                     }
                     UsbOperation::Exit => {
+                        obj.set_pulse(false);
                         obj.reset_state();
+                        imp.rev.set_reveal_child(false);
                     }
                 }
             }  
         });
     }
 
-    async fn upload(&self) -> Result<(), UploadErrors> {
+    async fn acquire_switch(&self) -> Result<Vec<(DeviceID, Result<OwnedFd, UsbError>)>, UploadErrors> {
         let proxy = UsbProxy::new().await?;
         let dev_wrapped = {
             let b = self.imp().switch_id.borrow();
@@ -299,8 +350,25 @@ impl RomsPage {
         let root = self.native().unwrap();
         let handle = WindowIdentifier::from_native(&root).await;
         let device = Device::new(dev_id, true);
-        let res = proxy.acquire_devices(handle.as_ref(), &[device], Default::default()).await?;
-        
+        Ok(proxy.acquire_devices(handle.as_ref(), &[device], Default::default()).await?)
+
+    }
+
+    fn calculate_total_size(&self) {
+        let imp = self.imp();
+        self.iterate_store(|_, index| {
+            let row = imp.list_box.row_at_index(index as i32).unwrap();
+
+            if let Ok(rom) = row.downcast::<Rom>() {
+                imp.total_size.replace_with(|&mut old| old + rom.imp().size.get() as u64);
+            }
+            true
+        });
+    }
+
+    async fn upload(&self) -> Result<(), UploadErrors> {
+        let res = self.acquire_switch().await?;
+
         if let Some((_, fd_res)) = res.first() {
             let mut ctx = SwitchProtocol::new()?;
             
@@ -313,11 +381,17 @@ impl RomsPage {
                 }
             }
 
+            self.calculate_total_size();
             self.send_roms(&ctx).await?;
             let (sender, reciever) = async_channel::unbounded();
             self.recieve_callbacks(reciever);
+            
+            let res = ctx.poll_commands(sender).await;
+            self.reset_state();
 
-            ctx.poll_commands(sender).await?;
+            if let Err(e) = res {
+                return Err(UploadErrors::Protocol(e));
+            };
         };
 
         Ok(())

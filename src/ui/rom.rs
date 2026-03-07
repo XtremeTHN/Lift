@@ -6,7 +6,7 @@ use gtk4::{
         self, ListStore,
         prelude::{FileExt, ListModelExt},
     },
-    glib::{self, Object, object::Cast},
+    glib::{self, Object, object::Cast, property::PropertyGet},
     prelude::{FrameExt, WidgetExt},
     subclass::prelude::*,
 };
@@ -103,31 +103,25 @@ impl Rom {
         self.imp().file.replace(file);
     }
 
-    pub fn populate_sync(&self) {
-        let obj = self.clone();
-        glib::MainContext::default().spawn_local(async move {
-            let imp = obj.imp();
-            let path = {
-                let f = imp.file.borrow();
-                f.as_ref().and_then(|f| f.path())
-            };
-
-            if let Some(p) = path {
-                obj.populate(p).await;
-            }
-        });
-    }
-
     pub fn reset_state(&self) {
         let imp = self.imp();
         self.set_show_progress_bar(false);
         imp.prog_bar.imp().set_progress(0.0);
     }
 
-    async fn setup_size(&self, path: &PathBuf) {
-        let f = gio::File::for_path(path);
-
+    async fn setup_size(&self) {
         let imp = self.imp();
+        let file = {
+            let f =imp.file.borrow();
+            f.clone()
+        };
+
+        if file.is_none() {
+            return;
+        }
+
+        let f = file.as_ref().unwrap();
+
         let querier = f
             .query_info_future(
                 "standard::size",
@@ -135,7 +129,9 @@ impl Rom {
                 glib::Priority::DEFAULT,
             )
             .await;
+            
         if let Ok(s) = querier {
+            println!("size {}", s.size());
             imp.size.set(s.size());
         }
     }
@@ -152,7 +148,7 @@ impl Rom {
         }
     }
 
-    pub fn set_progress(&self, read_size: u64) {
+    pub fn add_progress(&self, read_size: u64) {
         let imp = self.imp();
         imp.prog_bar.imp().add_progress(read_size as f64 / imp.size.get() as f64);
 
@@ -161,7 +157,21 @@ impl Rom {
         }
     }
 
-    pub async fn populate(&self, path: PathBuf) {
+    pub async fn populate(&self) {
+        let imp = self.imp();
+        let _path = {
+            let f = imp.file.borrow();
+            f.as_ref().and_then(|f| f.path())
+        };
+
+        if _path.is_none() {
+            return;
+        }
+
+        let path = _path.unwrap();
+
+        self.setup_size().await;
+
         let (sender, reciever) = async_channel::bounded::<(Option<RomInfo>, Option<String>)>(1);
 
         let send = sender.clone();
@@ -196,7 +206,6 @@ impl Rom {
                 }
 
                 let rom_info = info.unwrap();
-                self.setup_size(&path).await;
 
                 self.set_or(&obj.rom_title, "", &rom_info.title, "Unknown");
                 self.set_or(&obj.rom_version, "Version: ", &rom_info.version, "0.0.0");
@@ -268,7 +277,6 @@ impl Rom {
             .build();
         obj.frame.set_child(Some(&img));
 
-        self.setup_size(&path).await;
         self.set_or(
             &obj.rom_size,
             "Size: ",

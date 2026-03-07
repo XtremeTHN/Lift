@@ -6,12 +6,13 @@ use gtk4::gio;
 pub enum UsbCommand {
     Write(Vec<u8>, Sender<Result<usize>>, u64),
     Read(usize, Sender<Result<Vec<u8>>>, u64),
-    Exit
+    Exit(Sender<Result<()>>)
 }
 
-pub fn spawn_daemon(handle: DeviceHandle<Context>, in_ep: u8, out_ep: u8) -> Sender<UsbCommand> {
+pub fn spawn_daemon(handle: DeviceHandle<Context>, in_ep: u8, out_ep: u8, iface: u8) -> Sender<UsbCommand> {
     let (sender, reciever) = unbounded::<>();
     gio::spawn_blocking(move || {
+        log::info!("spawned daemon");
         while let Some(op) = reciever.recv_blocking().iter().next() {
             match op {
                 UsbCommand::Write(buf, send, timeout) => {
@@ -26,11 +27,14 @@ pub fn spawn_daemon(handle: DeviceHandle<Context>, in_ep: u8, out_ep: u8) -> Sen
                         .map(|_| buf);
                     send.send_blocking(res).expect("failed to send read result");
                 }
-                UsbCommand::Exit => {
+                UsbCommand::Exit(sender) => {
+                    sender.send_blocking(handle.reset());
+                    sender.send_blocking(handle.release_interface(iface));
                     break;
                 }
             }
         }
+        log::info!("daemon exit");
     });
 
     sender
