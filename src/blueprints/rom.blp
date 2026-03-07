@@ -50,12 +50,31 @@ template $Rom: ListBoxRow {
                 }
             }
 
-            Button {
+            Button end_button {
                 valign: center;
                 halign: end;
 
-                child: Image end_button_image {
-                    icon-name: "user-trash-symbolic";
+                child: Stack button_stack {
+                    transition-type: crossfade;
+                    StackPage {
+                        name: "remove";
+
+                        child: Image {
+                            icon-name: "user-trash-symbolic";
+                        };
+                    }
+
+                    StackPage {
+                        name: "progress";
+
+                        child: Image img {
+                            margin-top: 2;
+                            margin-end: 2;
+                            margin-start: 2;
+                            margin-bottom: 2;
+                            paintable: $CircularProgressPaintable prog_bar {};
+                        };
+                    }
                 };
 
                 clicked => $remove_rom() swapped;

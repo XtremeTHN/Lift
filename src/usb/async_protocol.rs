@@ -7,6 +7,7 @@ use std::string::FromUtf8Error;
 use binrw::BinRead;
 
 use gtk4::{gio, glib};
+use std::sync::Arc;
 
 use async_channel::Sender;
 use super::daemon::{UsbCommand, spawn_daemon};
@@ -39,6 +40,12 @@ struct FileHeader {
     rom_name_length: u64,
     #[br(ignore)]
     name: String,
+}
+
+pub enum UsbOperation {
+    File(Arc<str>, u64),
+    Exit,
+    Wait
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -123,14 +130,10 @@ impl SwitchProtocol {
     /// Handles the commands sent by the switch
     /// Call find_switch() before using this function
     /// Send the roms before using this function
-    pub async fn poll_commands(&self) -> ProtocolResult<()> {
-        let mut init = None::<std::time::Instant>;
-
+    pub async fn poll_commands(&self, sender: Sender<UsbOperation>) -> ProtocolResult<()> {
         loop {
+            sender.send(UsbOperation::Wait).await;
             let header = self.read_with_timeout(0x20, 10).await?;
-            if init.is_none() {
-                init = Some(std::time::Instant::now());
-            }
 
             let magic = String::from_utf8(header[0..4].to_vec())?;
             if magic != "TUC0" {
@@ -141,15 +144,16 @@ impl SwitchProtocol {
             match ProtocolCommand::try_from(raw_cmd) {
                 Ok(ProtocolCommand::Exit) => {
                     info!("Exit recieved");
+                    sender.send(UsbOperation::Exit).await;
                     break;
                 }
                 Ok(ProtocolCommand::FileRange) => {
                     info!("Recieved FileRange command");
-                    self.send_file(false).await?;
+                    self.send_file(false, &sender).await?;
                 }
                 Ok(ProtocolCommand::FileRangePadded) => {
                     info!("Recieved FileRangePadded command");
-                    self.send_file(true).await?;
+                    self.send_file(true, &sender).await?;
                 }
                 Err(_) => {
                     warn!("Invalid command id");
@@ -157,8 +161,6 @@ impl SwitchProtocol {
                 }
             }
         }
-
-        log::info!("elapsed: {:?}", init.unwrap().elapsed());
 
         Ok(())
     }
@@ -267,7 +269,7 @@ impl SwitchProtocol {
         Ok(())
     }
 
-    async fn send_file(&self, padded: bool) -> ProtocolResult<()> {
+    async fn send_file(&self, padded: bool, sender: &Sender<UsbOperation>) -> ProtocolResult<()> {
         let cmd = if padded {
             ProtocolCommand::FileRangePadded
         } else {
@@ -279,7 +281,7 @@ impl SwitchProtocol {
 
         self.send_file_response_header(cmd, header.range_size).await?;
 
-        let file = gio::File::for_path(header.name);
+        let file = gio::File::for_path(&header.name);
         let stream = file.read(None::<&gio::Cancellable>)?;
 
         stream.seek(header.range_offset as i64, glib::SeekType::Set, None::<&gio::Cancellable>)?;
@@ -289,6 +291,8 @@ impl SwitchProtocol {
         let mut buffer = vec![0u8; (BUFFER_SEGMENT_DATA_SIZE + PADDING_SIZE) as usize];
 
         let data_start = if padded { PADDING_SIZE as usize } else { 0 };
+
+        let name: Arc<str> = header.name.into();
         while current_offset < header.range_size {
             if current_offset + read_size >= header.range_size {
                 read_size = header.range_size - current_offset;
@@ -301,6 +305,7 @@ impl SwitchProtocol {
             buffer[data_start..data_start + slice.len()].copy_from_slice(slice);
             
             self.write(&buffer[..data_start + read_size as usize]).await?;
+            sender.send(UsbOperation::File(name.clone(), read_size)).await;
             current_offset += read_size;
         }
 

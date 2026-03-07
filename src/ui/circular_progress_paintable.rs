@@ -10,9 +10,9 @@ use glib::prelude::ObjectExt;
 use std::f64::consts::PI;
 use std::cell::{Cell, RefCell};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Default, glib::Enum)]
+#[enum_type(name = "Color")]
 #[repr(usize)]
-#[derive(Default)]
 pub enum Color {
     #[default]
     White = 0,
@@ -20,7 +20,6 @@ pub enum Color {
     Warning = 2,
     Success = 3
 }
-
 
 mod imp {
     use gtk4::{gdk::prelude::PaintableExt, prelude::{SnapshotExt, WidgetExt}};
@@ -31,9 +30,10 @@ mod imp {
     #[properties(wrapper_type = super::CircularProgressPaintable)]
     pub struct CircularProgressPaintable {
         pub widget: RefCell<Option<gtk4::Image>>,
-        pub color: Color,
         #[property(get, set = Self::set_progress)]
-        pub progress: Cell<f64>
+        pub progress: Cell<f64>,
+        #[property(get, set = Self::set_color, builder(Color::White))]
+        pub color: RefCell<Color>,
     }
 
     #[glib::object_subclass]
@@ -77,7 +77,7 @@ mod imp {
 
             ctx.translate(width / 2.0, height / 2.0);
 
-            let color = colors[self.color as usize];
+            let color = colors[*self.color.borrow() as usize];
             ctx.set_source_rgba(color.red() as f64, color.green() as f64, color.blue() as f64, color.alpha() as f64);
             
             ctx.arc(0.0, 0.0, width / 2.0 + 1.0, -PI / 2.0, arc_end);
@@ -98,12 +98,20 @@ mod imp {
             self.obj().invalidate_contents();
         }
 
+        pub fn add_progress(&self, value: f64) {
+            self.set_progress(self.progress.get() + value);
+        }
+
         pub fn set_widget(&self, widget: Option<gtk4::Image>) {
             let obj = self.obj().clone();
             self.widget.replace(widget.clone());
             widget.unwrap().connect_notify_local(Some("scale-factor"), move |_, _| {
                 obj.invalidate_size();
             });
+        }
+
+        pub fn set_color(&self, color: Color) {
+            self.color.replace(color);
         }
     }
 }

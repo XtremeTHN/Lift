@@ -1,4 +1,4 @@
-use std::{cell::RefCell, path::PathBuf};
+use std::{cell::{RefCell, Cell}, path::PathBuf};
 
 use gtk4::{
     CompositeTemplate, ListBoxRow, gdk,
@@ -7,13 +7,14 @@ use gtk4::{
         prelude::{FileExt, ListModelExt},
     },
     glib::{self, Object, object::Cast},
-    prelude::FrameExt,
+    prelude::{FrameExt, WidgetExt},
     subclass::prelude::*,
 };
 
 use glib::subclass::InitializingObject;
 
 use crate::{rom_info::RomInfo, utils::send_error};
+use super::circular_progress_paintable::{CircularProgressPaintable, Color};
 
 mod imp {
     use super::*;
@@ -37,8 +38,19 @@ mod imp {
         pub rom_size: TemplateChild<gtk4::Label>,
 
         #[template_child]
-        pub end_button_image: TemplateChild<gtk4::Image>,
+        pub end_button: TemplateChild<gtk4::Button>,
 
+        #[template_child]
+        pub button_stack: TemplateChild<gtk4::Stack>,
+
+        #[template_child]
+        pub img: TemplateChild<gtk4::Image>,
+
+        #[template_child]
+        pub prog_bar: TemplateChild<CircularProgressPaintable>,
+
+        pub current_progress: u64,
+        pub size: Cell<i64>,
         pub file: RefCell<Option<gio::File>>,
         pub store: RefCell<Option<ListStore>>,
     }
@@ -60,7 +72,13 @@ mod imp {
         }
     }
 
-    impl ObjectImpl for Rom {}
+    impl ObjectImpl for Rom {
+        fn constructed(&self) {
+            self.parent_constructed();
+            self.img.set_paintable(Some(&self.prog_bar.clone()));
+            self.prog_bar.imp().set_widget(Some(self.img.clone()));
+        }
+    }
     impl WidgetImpl for Rom {}
     impl ListBoxRowImpl for Rom {}
 }
@@ -100,32 +118,16 @@ impl Rom {
         });
     }
 
-    fn set_or(
-        &self,
-        widget: &TemplateChild<gtk4::Label>,
-        prefix: &str,
-        value: &Option<String>,
-        default: &str,
-    ) {
-        if let Some(v) = value {
-            widget.set_label(&format!("{}{}", prefix, v));
-        } else {
-            widget.set_label(&format!("{}{}", prefix, default));
-        }
+    pub fn reset_state(&self) {
+        let imp = self.imp();
+        self.set_show_progress_bar(false);
+        imp.prog_bar.imp().set_progress(0.0);
     }
 
-    fn format_size(&self, size: Option<i64>) -> Option<String> {
-        if let Some(s) = size {
-            let fmtd = glib::format_size(s.clamp(0, i64::MAX) as u64);
-            Some(fmtd.to_string())
-        } else {
-            None
-        }
-    }
-
-    pub async fn size(&self, path: &PathBuf) -> Option<i64> {
+    async fn setup_size(&self, path: &PathBuf) {
         let f = gio::File::for_path(path);
 
+        let imp = self.imp();
         let querier = f
             .query_info_future(
                 "standard::size",
@@ -134,9 +136,28 @@ impl Rom {
             )
             .await;
         if let Ok(s) = querier {
-            Some(s.size())
+            imp.size.set(s.size());
+        }
+    }
+
+    pub fn set_show_progress_bar(&self, show: bool) {
+        let imp = self.imp();
+
+        if show {
+            imp.button_stack.set_visible_child_name("progress");
+            imp.end_button.set_sensitive(false);
         } else {
-            None
+            imp.button_stack.set_visible_child_name("remove");
+            imp.end_button.set_sensitive(true);
+        }
+    }
+
+    pub fn set_progress(&self, read_size: u64) {
+        let imp = self.imp();
+        imp.prog_bar.imp().add_progress(read_size as f64 / imp.size.get() as f64);
+
+        if imp.prog_bar.imp().progress.get() == 1.0 {
+            imp.prog_bar.imp().set_color(Color::Success);
         }
     }
 
@@ -175,13 +196,14 @@ impl Rom {
                 }
 
                 let rom_info = info.unwrap();
+                self.setup_size(&path).await;
 
                 self.set_or(&obj.rom_title, "", &rom_info.title, "Unknown");
                 self.set_or(&obj.rom_version, "Version: ", &rom_info.version, "0.0.0");
                 self.set_or(
                     &obj.rom_size,
                     "Size: ",
-                    &self.format_size(self.size(&path).await),
+                    &self.format_size(Some(self.imp().size.get())),
                     "0b",
                 );
 
@@ -211,6 +233,29 @@ impl Rom {
         };
     }
 
+    fn set_or(
+        &self,
+        widget: &TemplateChild<gtk4::Label>,
+        prefix: &str,
+        value: &Option<String>,
+        default: &str,
+    ) {
+        if let Some(v) = value {
+            widget.set_label(&format!("{}{}", prefix, v));
+        } else {
+            widget.set_label(&format!("{}{}", prefix, default));
+        }
+    }
+
+    fn format_size(&self, size: Option<i64>) -> Option<String> {
+        if let Some(s) = size {
+            let fmtd = glib::format_size(s.clamp(0, i64::MAX) as u64);
+            Some(fmtd.to_string())
+        } else {
+            None
+        }
+    }
+
     async fn set_default_data(&self, path: PathBuf) {
         let obj = self.imp();
         obj.rom_title
@@ -223,10 +268,11 @@ impl Rom {
             .build();
         obj.frame.set_child(Some(&img));
 
+        self.setup_size(&path).await;
         self.set_or(
             &obj.rom_size,
             "Size: ",
-            &self.format_size(self.size(&path).await),
+            &self.format_size(Some(self.imp().size.get())),
             "0b",
         );
     }

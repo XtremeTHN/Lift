@@ -1,6 +1,7 @@
 use std::os::fd::AsRawFd;
 
 use ashpd::{WindowIdentifier, desktop::usb::{Device, DeviceID, UsbProxy}};
+use async_channel::Receiver;
 use gtk4::{
     CompositeTemplate,
     gio::{
@@ -15,7 +16,7 @@ use glib::subclass::InitializingObject;
 use libadwaita::{NavigationPage, subclass::prelude::*};
 
 use gtk4::glib::types::StaticType;
-use crate::{ui::rom::Rom, usb::{self, async_protocol::SwitchProtocol}, utils::send_error};
+use crate::{ui::rom::Rom, usb::{self, async_protocol::{SwitchProtocol, UsbOperation}}, utils::send_error};
 
 mod imp {
 
@@ -174,49 +175,113 @@ impl RomsPage {
         let files = res.unwrap();
 
         let obj = self.imp();
-        for i in 0..files.n_items() {
-            let x = files.item(i).and_downcast::<gio::File>();
-            match x {
-                Some(f) => {
-                    let path = f.path();
+        self.iterate_model(files, |f, _| {
+            let path = f.path();
 
-                    if path.is_none() {
-                        return;
+            if path.is_none() {
+                return true;
+            }
+
+            obj.store.get().unwrap().append(&f);
+            obj.stack.set_visible_child_name("roms");
+            self.action_set_enabled("clear-all", true);
+            true
+        });
+    }
+
+    fn get_rom(&self, name: &str) -> Option<Rom> {
+        let imp = self.imp();
+
+        let mut result = None::<Rom>;
+        self.iterate_store(|file, i| {
+            let path = file.path().unwrap().to_string_lossy().to_string();
+
+            if path != name {
+                return true;
+            }
+
+            let r = imp.list_box.row_at_index(i as i32).unwrap();
+            let rom = r.downcast::<Rom>();
+            if let Ok(unwrapped) = rom {
+                result = Some(unwrapped);
+                false
+            } else {
+                result = None;
+                false
+            }
+        });
+
+        result
+    }
+
+    async fn send_roms(&self, ctx: &SwitchProtocol) -> Result<(), UploadErrors> {
+        let mut files: Vec<String> = vec![];
+        self.iterate_store(|file, _| {
+            files.push(file.path().unwrap().to_string_lossy().to_string());
+            true
+        });
+
+        ctx.send_roms(files).await?;
+        Ok(())
+    }
+
+    fn iterate_model<F: FnMut(gio::File, u32) -> bool>(&self, model: ListModel, mut func: F) {
+        for x in 0..model.n_items() {
+            if let Some(obj) = model.item(x) {
+                let f = obj.downcast::<gio::File>();
+                match f {
+                    Ok(file) => {
+                        if !func(file, x) {
+                            break;
+                        }
                     }
-
-                    obj.store.get().unwrap().append(&f);
-                    obj.stack.set_visible_child_name("roms");
-                    self.action_set_enabled("clear-all", true);
-                }
-                None => {
-                    log::error!("File is None");
+                    Err(_) => {
+                        log::warn!("Couldn't cast file in position {}. Ignoring rom...", x);
+                    }
                 }
             }
         }
     }
 
-    async fn send_roms(&self, ctx: &SwitchProtocol) -> Result<(), UploadErrors> {
+    fn iterate_store<F: FnMut(gio::File, u32) -> bool>(&self, func: F) {
         let imp = self.imp();
-
-        let mut files: Vec<String> = vec![];
-
         let store = imp.store.get().unwrap();
-        for index in 0..store.n_items() {
-            if let Some(obj) = store.item(index) {
-                let f = obj.downcast::<gio::File>();
-                match f {
-                    Ok(file) => {
-                        files.push(file.path().unwrap().to_string_lossy().to_string());
+        self.iterate_model(store.clone().upcast::<gio::ListModel>(), func);
+    }
+
+    fn reset_state(&self) {
+        let imp = self.imp();
+        self.iterate_store(|_, index| {
+            let wrapped_row = imp.list_box.row_at_index(index as i32);
+            if let Some(row) = wrapped_row && let Ok(rom) = row.downcast::<Rom>() {
+                rom.reset_state();
+            }
+            true
+        });
+    }
+    
+    fn recieve_callbacks(&self, reciever: Receiver<UsbOperation>) {
+        let obj = self.clone();
+        glib::MainContext::default().spawn_local(async move {
+            while let Some(msg) = reciever.recv().await.iter().next() {
+                match msg {
+                    UsbOperation::File(name, read) => {
+                        let r = obj.get_rom(name);
+
+                        if let Some(r) = r {
+                            r.set_show_progress_bar(true);
+                            r.set_progress(*read);
+                        }
                     }
-                    Err(_) => {
-                        log::warn!("Couldn't cast file in position {}. Ignoring rom...", index);
+                    UsbOperation::Wait => {
+                        println!("Waiting for command");
+                    }
+                    UsbOperation::Exit => {
+                        obj.reset_state();
                     }
                 }
-            }
-        }
-
-        ctx.send_roms(files).await?;
-        Ok(())
+            }  
+        });
     }
 
     async fn upload(&self) -> Result<(), UploadErrors> {
@@ -249,7 +314,10 @@ impl RomsPage {
             }
 
             self.send_roms(&ctx).await?;
-            ctx.poll_commands().await?;
+            let (sender, reciever) = async_channel::unbounded();
+            self.recieve_callbacks(reciever);
+
+            ctx.poll_commands(sender).await?;
         };
 
         Ok(())
