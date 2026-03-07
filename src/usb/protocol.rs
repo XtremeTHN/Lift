@@ -2,9 +2,10 @@ use log::{info, warn};
 use rusb::Error;
 use rusb::{ConfigDescriptor, Context, Device, DeviceHandle, UsbContext};
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::string::FromUtf8Error;
 use std::time::Duration;
+use binrw::BinRead;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ProtocolError {
@@ -16,9 +17,10 @@ pub enum ProtocolError {
     DecodingError(#[from] FromUtf8Error),
     #[error("Invalid magic: {0}")]
     InvalidMagic(String),
-
     #[error("Switch not found")]
     SwitchNotFound(),
+    #[error("Error while recieving file header")]
+    ReadError(#[from] binrw::Error)
 }
 
 #[repr(u32)]
@@ -61,9 +63,13 @@ pub struct SwitchProtocol {
     out_endpoint: Option<u8>,
 }
 
+#[derive(BinRead)]
+#[br(little)]
 struct FileHeader {
     range_size: u64,
     range_offset: u64,
+    rom_name_length: u64,
+    #[br(ignore)]
     name: String,
 }
 
@@ -71,6 +77,16 @@ type ProtocolResult = Result<(), ProtocolError>;
 
 const BUFFER_SEGMENT_DATA_SIZE: u64 = 0x100000;
 const PADDING_SIZE: u64 = 0x1000;
+
+const PAD_3: [u8; 3] = [0; 3];
+const PAD_8: [u8; 8] = [0; 8];
+const PAD_C: [u8; 0xC] = [0; 0xC];
+const TUL0: &[u8; 4] = b"TUL0";
+
+const SWITCH_VENDOR_ID: u16 = 0x057E;
+const SWITCH_PRODUCT_ID: u16 = 0x3000;
+
+const FILE_HEADER_SIZE: usize = 0x20;
 
 impl SwitchProtocol {
     pub fn new() -> Result<SwitchProtocol, Error> {
@@ -157,7 +173,7 @@ impl SwitchProtocol {
         for dev in devs.iter() {
             let descriptor = dev.device_descriptor().unwrap();
 
-            if descriptor.vendor_id() == 0x057E && descriptor.product_id() == 0x3000 {
+            if descriptor.vendor_id() == SWITCH_VENDOR_ID && descriptor.product_id() == SWITCH_PRODUCT_ID {
                 info!("Found switch on bus {:03}", dev.bus_number());
                 switch = Some(dev);
             }
@@ -180,9 +196,9 @@ impl SwitchProtocol {
 
     fn send_list_header(&self, length: u32) -> ProtocolResult {
         info!("Sending rom list with length of {}", length);
-        self.write("TUL0".as_bytes())?;
+        self.write(TUL0)?;
         self.write(&length.to_le_bytes())?;
-        self.write(&vec![0u8; 0x8])?; // padding
+        self.write(&PAD_8)?; // padding
 
         Ok(())
     }
@@ -200,7 +216,7 @@ impl SwitchProtocol {
             length += file.len() + 1;
         }
 
-        self.send_list_header(length.try_into().unwrap())?;
+        self.send_list_header(length as u32)?;
 
         for file in new_vec {
             self.write(file.as_bytes())?;
@@ -210,32 +226,26 @@ impl SwitchProtocol {
     }
 
     fn recieve_file(&self) -> Result<FileHeader, ProtocolError> {
-        let mut header = vec![0u8; 0x20];
+        let mut header = [0u8; FILE_HEADER_SIZE];
         self.read(&mut header)?;
 
-        let range_size = u64::from_le_bytes(header[0..8].try_into().unwrap());
-        let range_offset = u64::from_le_bytes(header[8..16].try_into().unwrap());
-        let rom_name_len = u64::from_le_bytes(header[16..24].try_into().unwrap());
-
-        let mut raw_name = vec![0u8; rom_name_len.try_into().unwrap()];
+        let mut cur = Cursor::new(header);
+        let mut file_header = FileHeader::read(&mut cur)?;
+        
+        let mut raw_name = vec![0u8; file_header.rom_name_length as usize];
         self.read(&mut raw_name)?;
+        file_header.name = String::from_utf8(raw_name)?;
 
-        let rom_name = String::from_utf8(raw_name)?;
-
-        Ok(FileHeader {
-            range_size,
-            range_offset,
-            name: rom_name,
-        })
+        Ok(file_header)
     }
 
     fn send_file_response_header(&self, cmd_id: ProtocolCommand, data_size: u64) -> ProtocolResult {
         self.write("TUC0".as_bytes())?;
-        self.write(&vec![1])?;
-        self.write(&vec![0u8; 0x3])?; // padding 1
+        self.write(&[1])?;
+        self.write(&PAD_3)?; // padding 1
         self.write(&(cmd_id as u32).to_le_bytes())?;
         self.write(&data_size.to_le_bytes())?;
-        self.write(&vec![0u8; 0xC])?; // padding 2
+        self.write(&PAD_C)?; // padding 2
 
         Ok(())
     }
@@ -249,7 +259,7 @@ impl SwitchProtocol {
 
         let header = self.recieve_file()?;
 
-        info!("Rom name: {}", header.name);
+        info!("Requested file: {}", header.name);
 
         self.send_file_response_header(cmd, header.range_size)?;
         let mut file = File::open(header.name.clone()).expect("Couldn't find rom");
@@ -259,27 +269,18 @@ impl SwitchProtocol {
 
         let mut current_offset: u64 = 0x0;
         let mut read_size = BUFFER_SEGMENT_DATA_SIZE;
-
-        if padded {
-            read_size -= PADDING_SIZE;
-        }
+        let mut buffer = vec![0u8; (BUFFER_SEGMENT_DATA_SIZE + PADDING_SIZE) as usize];
 
         while current_offset < header.range_size {
             if current_offset + read_size >= header.range_size {
                 read_size = header.range_size - current_offset;
             }
 
-            let mut buffer = vec![0u8; read_size.try_into().unwrap()];
-            file.read_exact(&mut buffer).expect("couldn't read");
+            let data_start = if padded { PADDING_SIZE as usize } else { 0 };
+            let slice = &mut buffer[data_start..data_start + read_size as usize];
+            file.read_exact(slice).expect("couldn't read");
 
-            if padded {
-                let mut new_buff = vec![0u8; PADDING_SIZE.try_into().unwrap()];
-                new_buff.append(&mut buffer);
-
-                buffer = new_buff;
-            }
-
-            self.write(&buffer)?;
+            self.write(&buffer[..data_start + read_size as usize])?;
             current_offset += read_size;
         }
 
@@ -301,7 +302,7 @@ impl SwitchProtocol {
 
             let raw_cmd = u32::from_le_bytes(header[8..12].try_into().unwrap());
             let cmd = ProtocolCommand::try_from(raw_cmd);
-            if let Err(_) = cmd {
+            if cmd.is_err() {
                 warn!("Invalid command: {}", raw_cmd);
                 continue;
             }
