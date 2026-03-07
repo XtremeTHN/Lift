@@ -39,22 +39,39 @@ template $RomsPage: Adw.NavigationPage {
                     Label info_label {
                         halign: start;
                     }
+
                     ProgressBar total_progress {
                         pulse-step: 0.20;
                     }
                 };
             }
 
-            Button {
-                hexpand: true;
-                label: _("Upload to switch");
-                action-name: "upload";
+            Stack top_button_stack {
+                StackPage {
+                    name: "upload";
+
+                    child: Button {
+                        hexpand: true;
+                        label: _("Upload to switch");
+                        action-name: "upload";
+                    };
+                }
+                StackPage {
+                    name: "cancel";
+
+                    child: Button {
+                        hexpand: true;
+                        label: _("Cancel upload");
+                        action-name: "cancel-upload";
+                    };
+                }
             }
         }
 
         content: ScrolledWindow {
             child: Stack stack {
                 transition-type: crossfade;
+
                 StackPage {
                     name: "placeholder";
 
@@ -72,7 +89,7 @@ template $RomsPage: Adw.NavigationPage {
                         child: ListBox list_box {
                             styles [
                                 "boxed-list",
-                                "margin-10"
+                                "margin-10",
                             ]
 
                             valign: start;

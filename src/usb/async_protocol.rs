@@ -1,4 +1,4 @@
-use gtk4::gio::prelude::{FileExt, InputStreamExt, SeekableExt};
+use gtk4::gio::prelude::{CancellableExt, FileExt, InputStreamExt, SeekableExt};
 use log::{info, warn};
 use rusb::Error;
 use rusb::{ConfigDescriptor, Context, DeviceHandle, UsbContext};
@@ -140,8 +140,19 @@ impl SwitchProtocol {
     /// Handles the commands sent by the switch
     /// Call find_switch() before using this function
     /// Send the roms before using this function
-    pub async fn poll_commands(&mut self, sender: Sender<UsbOperation>) -> ProtocolResult<()> {
+    pub async fn poll_commands(&mut self, cancellable: Option<gio::Cancellable>, sender: Sender<UsbOperation>) -> ProtocolResult<()> {
+        let _cancellable = if let Some(c) = cancellable {
+            c
+        } else {
+            gio::Cancellable::new()
+        };
+
         loop {
+            if _cancellable.is_cancelled() {
+                info!("Cancelled");
+                break;
+            }
+
             sender.send(UsbOperation::Wait).await;
             let header = self.read_with_timeout(0x20, 0).await?;
 
@@ -154,17 +165,15 @@ impl SwitchProtocol {
             match ProtocolCommand::try_from(raw_cmd) {
                 Ok(ProtocolCommand::Exit) => {
                     info!("Exit recieved");
-                    sender.send(UsbOperation::Exit).await;
-                    self.send_exit().await?;
                     break;
                 }
                 Ok(ProtocolCommand::FileRange) => {
                     info!("Recieved FileRange command");
-                    self.send_file(false, &sender).await?;
+                    self.send_file(false, &sender, &_cancellable).await?;
                 }
                 Ok(ProtocolCommand::FileRangePadded) => {
                     info!("Recieved FileRangePadded command");
-                    self.send_file(true, &sender).await?;
+                    self.send_file(true, &sender, &_cancellable).await?;
                 }
                 Err(_) => {
                     warn!("Invalid command id");
@@ -172,6 +181,9 @@ impl SwitchProtocol {
                 }
             }
         }
+
+        sender.send(UsbOperation::Exit).await;
+        self.send_exit().await?;
 
         Ok(())
     }
@@ -278,7 +290,7 @@ impl SwitchProtocol {
         Ok(())
     }
 
-    async fn send_file(&self, padded: bool, sender: &Sender<UsbOperation>) -> ProtocolResult<()> {
+    async fn send_file(&self, padded: bool, sender: &Sender<UsbOperation>, cancellable: &gio::Cancellable) -> ProtocolResult<()> {
         let cmd = if padded {
             ProtocolCommand::FileRangePadded
         } else {
@@ -302,7 +314,7 @@ impl SwitchProtocol {
         let data_start = if padded { PADDING_SIZE as usize } else { 0 };
 
         let name: Arc<str> = header.name.into();
-        while current_offset < header.range_size {
+        while current_offset < header.range_size && !cancellable.is_cancelled() {
             if current_offset + read_size >= header.range_size {
                 read_size = header.range_size - current_offset;
             }

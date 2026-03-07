@@ -5,7 +5,7 @@ use async_channel::Receiver;
 use gtk4::{
     CompositeTemplate,
     gio::{
-        self, ListModel, prelude::{FileExt, ListModelExt}
+        self, ListModel, prelude::{CancellableExt, FileExt, ListModelExt}
     },
     glib::{self, object::{Cast, CastNone, ObjectExt}},
     prelude::{WidgetExt, WidgetExtManual},
@@ -21,7 +21,7 @@ use crate::{ui::rom::Rom, usb::{self, async_protocol::{SwitchProtocol, UsbOperat
 
 mod imp {
 
-    use gtk4::{gio::ListStore, glib::SourceId};
+    use gtk4::{gio::{Cancellable, ListStore}, glib::SourceId};
     use std::cell::{OnceCell, RefCell};
 
     use super::*;
@@ -44,12 +44,16 @@ mod imp {
         #[template_child]
         pub list_box: TemplateChild<gtk4::ListBox>,
 
+        #[template_child]
+        pub top_button_stack: TemplateChild<gtk4::Stack>,
+
         pub store: OnceCell<ListStore>,
 
         pub switch_id: RefCell<Option<DeviceID>>,
         pub pulse_id: RefCell<Option<SourceId>>,
         pub total_size: RefCell<u64>,
         pub sent_bytes: RefCell<u64>,
+        pub cancellable: RefCell<Option<Cancellable>>,
     }
 
     #[glib::object_subclass]
@@ -74,6 +78,10 @@ mod imp {
                 if let Err(e) = page.upload().await {
                     send_error(&page.imp().list_box.clone(), &format!("Couldn't upload: {}", e));
                 };
+            });
+
+            klass.install_action_async("cancel-upload", None, async |page, _, _| {
+                page.cancel_upload();
             });
         }
 
@@ -118,6 +126,13 @@ impl RomsPage {
     pub fn set_switch_id(&self, id: Option<DeviceID>) {
         let imp = self.imp();
         imp.switch_id.replace(id);
+    }
+
+    pub fn cancel_upload(&self) {
+        if let Some(cancellable) = self.imp().cancellable.borrow().clone() {
+            cancellable.cancel();
+            self.imp().top_button_stack.set_sensitive(false);
+        }
     }
 
     fn setup_list(&self) {
@@ -264,6 +279,9 @@ impl RomsPage {
         imp.total_progress.set_fraction(0.0);
         imp.total_size.replace(0);
         imp.sent_bytes.replace(0);
+        
+        imp.top_button_stack.set_sensitive(true);
+        imp.top_button_stack.set_visible_child_name("upload");
         self.action_set_enabled("upload", true);
         self.iterate_store(|_, index| {
             let wrapped_row = imp.list_box.row_at_index(index as i32);
@@ -328,9 +346,7 @@ impl RomsPage {
                     }
                     UsbOperation::Exit => {
                         imp.info_label.set_label("Exit recieved");
-                        obj.set_pulse(false);
                         obj.reset_state();
-                        imp.rev.set_reveal_child(false);
                     }
                 }
             }  
@@ -370,6 +386,7 @@ impl RomsPage {
 
     async fn upload(&self) -> Result<(), UploadErrors> {
         let res = self.acquire_switch().await?;
+        let imp = self.imp();
 
         if let Some((_, fd_res)) = res.first() {
             let mut ctx = SwitchProtocol::new()?;
@@ -387,8 +404,11 @@ impl RomsPage {
             self.send_roms(&ctx).await?;
             let (sender, reciever) = async_channel::unbounded();
             self.recieve_callbacks(reciever);
-            
-            let res = ctx.poll_commands(sender).await;
+
+            let cancellable = gio::Cancellable::new();
+            imp.cancellable.replace(Some(cancellable.clone()));
+            imp.top_button_stack.set_visible_child_name("cancel");
+            let res = ctx.poll_commands(Some(cancellable), sender).await;
             self.reset_state();
 
             if let Err(e) = res {
