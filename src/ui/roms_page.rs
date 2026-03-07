@@ -1,9 +1,9 @@
 use gtk4::{
     CompositeTemplate,
     gio::{
-        self, ListModel, prelude::{FileExt, ListModelExt, ListModelExtManual}
+        self, ListModel, prelude::{FileExt, ListModelExt}
     },
-    glib::{self, Object, object::{Cast, CastNone, ObjectExt}, variant::ToVariant},
+    glib::{self, object::{Cast, CastNone, ObjectExt}},
     prelude::WidgetExt,
     subclass::prelude::*,
 };
@@ -17,7 +17,7 @@ use crate::{ui::rom::Rom, utils::send_error};
 mod imp {
 
     use gtk4::gio::ListStore;
-    use std::cell::{OnceCell, RefCell};
+    use std::cell::OnceCell;
 
     use super::*;
 
@@ -125,7 +125,7 @@ impl RomsPage {
 
         let r = self.root().unwrap();
         let wrapped_cast = r.downcast::<gtk4::Window>();
-        if let Err(_) = wrapped_cast {
+        if wrapped_cast.is_err() {
             send_error(self, "Couldn't get window");
             return;
         }
@@ -137,7 +137,7 @@ impl RomsPage {
             if e.to_string() == "Dismissed by user" {
                 return;
             }
-            send_error(self, &format!("Couldn't get opened files: {}", e.to_string()));
+            send_error(self, &format!("Couldn't get opened files: {}", e));
             return;
         }
 

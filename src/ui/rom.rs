@@ -89,7 +89,12 @@ impl Rom {
         let obj = self.clone();
         glib::MainContext::default().spawn_local(async move {
             let imp = obj.imp();
-            if let Some(p) = imp.file.borrow().as_ref().unwrap().path() {
+            let path = {
+                let f = imp.file.borrow();
+                f.as_ref().and_then(|f| f.path())
+            };
+
+            if let Some(p) = path {
                 obj.populate(p).await;
             }
         });
@@ -119,7 +124,7 @@ impl Rom {
     }
 
     pub async fn size(&self, path: &PathBuf) -> Option<i64> {
-        let f = gio::File::for_path(&path);
+        let f = gio::File::for_path(path);
 
         let querier = f
             .query_info_future(
@@ -163,8 +168,8 @@ impl Rom {
         let obj = self.imp();
         match reciever.recv().await {
             Ok((info, error)) => {
-                if !error.is_none() {
-                    send_error(self, &error.unwrap());
+                if let Some(err) = error {
+                    send_error(self, &err);
                     self.set_default_data(path).await;
                     return;
                 }
@@ -191,7 +196,7 @@ impl Rom {
                         Err(e) => {
                             send_error(
                                 self,
-                                &format!("Couldn't construct texture: {}", e.to_string()),
+                                &format!("Couldn't construct texture: {}", e),
                             );
                         }
                     }
@@ -209,7 +214,7 @@ impl Rom {
     async fn set_default_data(&self, path: PathBuf) {
         let obj = self.imp();
         obj.rom_title
-            .set_label(&path.file_name().unwrap().to_string_lossy().to_string());
+            .set_label(path.file_name().unwrap().to_string_lossy().as_ref());
         obj.rom_version.set_label("Version: 0.0.0");
 
         let img = gtk4::Image::builder()
@@ -236,12 +241,11 @@ impl Rom {
         let s = wrapped_store.as_ref().unwrap();
 
         for i in 0..s.clone().n_items() {
-            if let Some(item) = s.item(i) {
-                if item.downcast_ref::<gio::File>() == Some(f) {
+            if let Some(item) = s.item(i)
+                && item.downcast_ref::<gio::File>() == Some(f) {
                     s.remove(i);
                     break;
                 }
-            }
         }
     }
 }

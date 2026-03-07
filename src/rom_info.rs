@@ -106,46 +106,43 @@ impl RomInfo {
 
             let mut nca = Nca::new(&keyring, &mut r).expect("err");
 
-            match nca.header.content_type {
-                ContentType::Control => {
-                    log::info!("found control nca at index {}: {}", index, name);
-                    let mut fs = nca.open_fs(0, &mut r)?;
-                    let rom_fs = RomFs::new(&mut fs).expect("err");
+            if let ContentType::Control = nca.header.content_type {
+                log::info!("found control nca at index {}: {}", index, name);
+                let mut fs = nca.open_fs(0, &mut r)?;
+                let rom_fs = RomFs::new(&mut fs).expect("err");
 
-                    let mut nacp: Option<Nacp> = None;
-                    let mut texture: Option<Vec<u8>> = None;
+                let mut nacp: Option<Nacp> = None;
+                let mut texture: Option<Vec<u8>> = None;
 
-                    for x in rom_fs.files.iter() {
-                        let name = String::from_utf8(x.name.clone())?;
-                        let unwrapped = PathBuf::from(&name);
-                        let ext = unwrapped.extension();
-                        if ext.is_none() {
-                            return Err(FindInfoFilesError::NoExtension(name));
-                        }
-
-                        let ext_unwrapped = ext.unwrap();
-                        if ext_unwrapped == "dat" && texture.is_none() {
-                            let mut buf = vec![0u8; x.size as usize];
-                            let mut reg = rom_fs.get_file(x, &mut fs);
-                            
-                            reg.read_exact(&mut buf)?;
-
-                            texture = Some(buf);
-                        }
-
-                        if ext_unwrapped == "nacp" && nacp.is_none() {
-                            let mut reg = rom_fs.get_file(x, &mut fs);
-                            nacp = Some(Nacp::read(&mut reg).expect("asd"));
-                        }
+                for x in rom_fs.files.iter() {
+                    let name = String::from_utf8(x.name.clone())?;
+                    let unwrapped = PathBuf::from(&name);
+                    let ext = unwrapped.extension();
+                    if ext.is_none() {
+                        return Err(FindInfoFilesError::NoExtension(name));
                     }
 
-                    if nacp.is_none() {
-                        return Err(FindInfoFilesError::NacpNotFound);
+                    let ext_unwrapped = ext.unwrap();
+                    if ext_unwrapped == "dat" && texture.is_none() {
+                        let mut buf = vec![0u8; x.size as usize];
+                        let mut reg = rom_fs.get_file(x, &mut fs);
+                        
+                        reg.read_exact(&mut buf)?;
+
+                        texture = Some(buf);
                     }
 
-                    return Ok((nacp.unwrap(), texture));
+                    if ext_unwrapped == "nacp" && nacp.is_none() {
+                        let mut reg = rom_fs.get_file(x, &mut fs);
+                        nacp = Some(Nacp::read(&mut reg).expect("asd"));
+                    }
                 }
-                _ => {} 
+
+                if nacp.is_none() {
+                    return Err(FindInfoFilesError::NacpNotFound);
+                }
+
+                return Ok((nacp.unwrap(), texture));
             }
         }
 

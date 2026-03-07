@@ -1,6 +1,4 @@
-use gtk4::{self, gio, gio::prelude::{ApplicationExt, ApplicationExtManual}, prelude::GtkWindowExt};
-use libadwaita::{Application};
-use std::path::PathBuf;
+use gtk4::{self};
 
 mod rom_info;
 mod config;

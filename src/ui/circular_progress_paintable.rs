@@ -12,18 +12,15 @@ use std::cell::{Cell, RefCell};
 
 #[derive(Clone, Copy)]
 #[repr(usize)]
+#[derive(Default)]
 pub enum Color {
+    #[default]
     WHITE = 0,
     ERROR = 1,
     WARNING = 2,
     SUCCESS = 3
 }
 
-impl Default for Color {
-    fn default() -> Self {
-        Self::WHITE
-    }
-}
 
 mod imp {
     use gtk4::{gdk::prelude::PaintableExt, prelude::{SnapshotExt, WidgetExt}};
@@ -86,7 +83,7 @@ mod imp {
             ctx.arc(0.0, 0.0, width / 2.0 + 1.0, -PI / 2.0, arc_end);
             ctx.stroke().expect("fail to stroke");
 
-            let mut rgba = color.clone();
+            let mut rgba = color;
             rgba.set_alpha(rgba.alpha() * 0.25);
 
             ctx.set_source_rgba(rgba.red() as f64, rgba.green() as f64, rgba.blue() as f64, rgba.alpha() as f64);
