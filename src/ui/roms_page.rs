@@ -278,7 +278,7 @@ impl RomsPage {
         let imp = self.imp();
         if pulse {
             let obj = self.clone();
-            let t = glib::timeout_add_seconds_local(1, move || {
+            let t = glib::timeout_add_local(std::time::Duration::from_millis(400), move || {
                 obj.imp().total_progress.pulse();
                 glib::ControlFlow::Continue
             });
