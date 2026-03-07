@@ -313,6 +313,7 @@ impl RomsPage {
                 match msg {
                     UsbOperation::File(name, read) => {
                         obj.set_pulse(false);
+                        imp.info_label.set_label(&format!("Sending file: {}", name));
                         let r = obj.get_rom(name);
 
                         if let Some(r) = r {
@@ -326,6 +327,7 @@ impl RomsPage {
                         obj.set_pulse(true);
                     }
                     UsbOperation::Exit => {
+                        imp.info_label.set_label("Exit recieved");
                         obj.set_pulse(false);
                         obj.reset_state();
                         imp.rev.set_reveal_child(false);
