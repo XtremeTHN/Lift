@@ -30,7 +30,7 @@ pub enum TitleLanguage {
     BrazilianPortuguese = 15,
 }
 
-#[derive(BinRead, Debug)]
+#[derive(BinRead)]
 #[br(little)]
 pub struct Title {
     #[br(count = 0x200)]
@@ -53,7 +53,7 @@ impl Title {
     }
 }
 
-#[derive(BinRead, Debug)]
+#[derive(BinRead)]
 #[br(little)]
 pub struct Nacp {
     #[br(count = 16)]

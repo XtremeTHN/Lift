@@ -1,17 +1,15 @@
 use binrw::BinRead;
-use positioned_io::ReadAt;
-// use crate::roms::readers::FileRegion;
 
 pub fn media_to_bytes(media: u32) -> u32 {
-    return media * 0x200;
+    media * 0x200
 }
 
 #[derive(BinRead, Debug, Clone, Copy)]
 #[br(little)]
 pub struct FsEntry {
-    #[br(map(|x| media_to_bytes(x)))]
+    #[br(map(media_to_bytes))]
     pub start_offset: u32,
-    #[br(pad_after = 0x8, map(|x| media_to_bytes(x)))]
+    #[br(pad_after = 0x8, map(media_to_bytes))]
     pub end_offset: u32,
 }
 

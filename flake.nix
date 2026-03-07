@@ -7,6 +7,7 @@
 
     nativeBuildInputs = with pkgs; [
       rustc
+      clippy
       cargo
       meson
       ninja

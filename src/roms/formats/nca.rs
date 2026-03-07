@@ -1,5 +1,5 @@
 use crate::roms::fs::fs::{EncryptionType, FsEntry, FsHeader, FsType, HashData};
-use crate::roms::fs::romfs::{RomFs, RomFsErrors};
+use crate::roms::fs::romfs::RomFsErrors;
 use crate::roms::readers::{EncryptedCtrFileRegion, FileRegion};
 use crate::roms::{crypto::get_tweak, keyring::Keyring};
 use aes::cipher::BlockDecryptMut;
@@ -8,7 +8,7 @@ use aes::{Aes128, cipher::KeyInit};
 use binrw::BinRead;
 use ecb::Decryptor;
 use positioned_io::ReadAt;
-use std::io::{Cursor, Read, Seek};
+use std::io::{Cursor};
 use std::string::FromUtf8Error;
 use xts_mode::Xts128;
 
@@ -32,7 +32,7 @@ pub enum ContentType {
 
 #[derive(BinRead, Debug, Clone, Copy)]
 #[br(repr = u8)]
-enum KeyGenOld {
+pub enum KeyGenOld {
     _1_0_0 = 0x00,
     Unusued = 0x01,
     _3_0_0 = 0x02,
@@ -40,7 +40,7 @@ enum KeyGenOld {
 
 #[derive(BinRead, Debug, Clone, Copy)]
 #[br(repr = u8)]
-enum KeyAreaEncryptionKeyIndex {
+pub enum KeyAreaEncryptionKeyIndex {
     Application = 0x00,
     Ocean = 0x01,
     System = 0x02,
@@ -57,11 +57,9 @@ pub struct KeyArea {
     pub unk_key: Vec<u8>,
 }
 
-#[derive(BinRead, Debug)]
+#[derive(BinRead)]
 #[br(little)]
 pub struct NcaHeader {
-    // #[br(count = 0x200)]
-    // signature: Vec<u8>,
     #[br(seek_before = std::io::SeekFrom::Start(0x200), count = 4)]
     pub magic: Vec<u8>,
     pub distribution_type: DistributionType,
@@ -86,7 +84,6 @@ pub struct NcaHeader {
     pub fs_entries: Vec<FsEntry>,
 }
 
-#[derive(Debug)]
 pub struct Nca {
     pub header: NcaHeader,
     pub key_area: KeyArea,
@@ -166,7 +163,7 @@ impl Nca {
 
     fn get_key_generation(&self) -> u8 {
         let old = self.header.key_generation_old as u8;
-        let new = self.header.key_generation as u8;
+        let new = self.header.key_generation;
 
         let key = if old < new { new } else { old };
 
@@ -178,13 +175,13 @@ impl Nca {
 
         match self.header.key_area_encryption_key_index {
             KeyAreaEncryptionKeyIndex::Application => {
-                return self.keyring.key_area_application[_gen as usize].clone();
+                self.keyring.key_area_application[_gen as usize].clone()
             }
             KeyAreaEncryptionKeyIndex::Ocean => {
-                return self.keyring.key_area_ocean[_gen as usize].clone();
+                self.keyring.key_area_ocean[_gen as usize].clone()
             }
             KeyAreaEncryptionKeyIndex::System => {
-                return self.keyring.key_area_system[_gen as usize].clone();
+                self.keyring.key_area_system[_gen as usize].clone()
             }
         }
     }
@@ -232,7 +229,7 @@ impl Nca {
     }
 
     pub fn get_entry_for_header(&self, header: &FsHeader) -> FsEntry {
-        return self.header.fs_entries[header.section as usize];
+        self.header.fs_entries[header.section as usize]
     }
 
     pub fn open_fs<T: ReadAt>(
@@ -241,27 +238,26 @@ impl Nca {
         stream: T,
     ) -> Result<EncryptedCtrFileRegion<T>, NcaErrors> {
         let header = &self.fs_headers[header];
-        let entry = self.get_entry_for_header(&header);
+        let entry = self.get_entry_for_header(header);
 
         if header.encryption_type != EncryptionType::AesCtr {
             return Err(NcaErrors::UnsupportedEncryption(header.encryption_type));
         }
 
-        let fs_offset: u64;
-        match &header.hash_data {
+        let fs_offset: u64 = match &header.hash_data {
             HashData::HierarchicalIntegrity(data) => {
-                fs_offset = entry.start_offset as u64
-                    + data.info_level_hash.levels.last().unwrap().logical_offset;
+                entry.start_offset as u64
+                    + data.info_level_hash.levels.last().unwrap().logical_offset
             }
             HashData::HierarchicalSha256(data) => {
-                fs_offset = entry.start_offset as u64 + data.layer_regions.last().unwrap().offset;
+                entry.start_offset as u64 + data.layer_regions.last().unwrap().offset
             }
-        }
+        };
 
         let r = FileRegion::new(
             stream,
             fs_offset,
-            (entry.end_offset as u64 - fs_offset).into(),
+            entry.end_offset as u64 - fs_offset,
         );
         let e = EncryptedCtrFileRegion::new(r, self.key_area.aes_ctr_key.clone(), header.ctr);
         Ok(e)

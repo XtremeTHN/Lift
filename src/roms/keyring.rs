@@ -1,8 +1,6 @@
 use hex::{FromHexError, decode};
-use log::info;
 use std::fs::File;
 use std::io::Read;
-use std::path::PathBuf;
 use std::string::FromUtf8Error;
 use thiserror::Error;
 
@@ -11,13 +9,13 @@ use shellexpand::tilde;
 #[derive(Error, Debug)]
 pub enum KeyringErrors {
     #[error("Couldn't decode value")]
-    HexDecodingError(#[from] FromHexError),
+    HexDecoding(#[from] FromHexError),
 
     #[error("Couldn't decode key")]
-    Utf8DecodingError(#[from] FromUtf8Error),
+    Utf8Decoding(#[from] FromUtf8Error),
 
     #[error("Failed to read")]
-    ReadError(#[from] std::io::Error),
+    Read(#[from] std::io::Error),
 }
 
 #[derive(Default, Debug, Clone)]

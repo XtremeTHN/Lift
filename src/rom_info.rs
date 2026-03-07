@@ -1,9 +1,7 @@
-use std::{fs::File, io::{Read, Seek, Write}, path::PathBuf, string::FromUtf8Error};
+use std::{fs::File, io::{Read, Seek}, path::PathBuf, string::FromUtf8Error};
 
 use binrw::BinRead;
 use gtk4::{
-    gdk::Texture,
-    gio::{self, prelude::FileExt},
     glib
 };
 use positioned_io::ReadAt;
@@ -158,7 +156,7 @@ impl RomInfo {
         let mut xci = Xci::new(&mut self.file)?;
 
         let mut part = xci.open_partition("secure".to_string(), &self.file)?;
-        let pfs = xci.open_partition_fs(&mut part, &self.file)?;
+        let pfs = xci.open_partition_fs(&mut part)?;
         let (nacp, texture) = self.find_info_files(pfs, &mut part)?;
 
         self.image_data = texture;

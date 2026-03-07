@@ -2,7 +2,6 @@ use binrw::BinRead;
 
 use crate::roms::{
     fs::{
-        fs::media_to_bytes,
         hfs::HashPartitionFsHeader,
         pfs::{PFSEntry, PartitionFs, PartitionFsErrors},
     },
@@ -101,7 +100,6 @@ impl Xci {
     pub fn open_partition_fs<T: ReadAt + Read + Seek>(
         &mut self,
         partition: &mut FileRegion<T>,
-        stream: T,
     ) -> Result<PartitionFs<HashPartitionFsHeader>, XciErrors> {
         let hfs_header = HashPartitionFsHeader::read(partition)?;
         let hfs = PartitionFs::<HashPartitionFsHeader>::new(hfs_header)?;

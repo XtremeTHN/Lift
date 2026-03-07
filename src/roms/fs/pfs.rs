@@ -104,11 +104,11 @@ impl<T: BinRead + PFSHeader> PartitionFs<T> {
     }
 
     pub fn open_entry<R: ReadAt, E: PFSEntry>(&self, entry: &E, stream: R) -> FileRegion<R> {
-        return FileRegion::new(
+        FileRegion::new(
             stream,
-            entry.offset() as u64 + self.header.raw_data_pos(),
+            entry.offset() + self.header.raw_data_pos(),
             entry.size(),
-        );
+        )
     }
 }
 
@@ -118,6 +118,6 @@ impl PartitionFs<PartitionFsHeader> {
     ) -> Result<PartitionFs<PartitionFsHeader>, binrw::Error> {
         let h = PartitionFsHeader::read(stream)?;
 
-        return PartitionFs::<PartitionFsHeader>::new(h);
+        PartitionFs::<PartitionFsHeader>::new(h)
     }
 }

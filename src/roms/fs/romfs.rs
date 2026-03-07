@@ -1,5 +1,5 @@
 use std::{
-    io::{Cursor, Read, Seek, SeekFrom},
+    io::{Cursor, Read, Seek},
     string::FromUtf8Error,
 };
 
@@ -29,7 +29,7 @@ pub struct RomFsHeader {
     pub data_offset: u64,
 }
 
-#[derive(BinRead, Debug)]
+#[derive(BinRead)]
 #[br(little)]
 pub struct RomFsFileEntry {
     pub parent: u32,
@@ -43,29 +43,28 @@ pub struct RomFsFileEntry {
     pub name: Vec<u8>,
 }
 
-#[derive(BinRead, Debug)]
-#[br(little)]
-pub struct RomFsDirectoryEntry {
-    pub parent: u32,
-    pub sibling: u32,
-    pub child: u32,
-    pub file: u32,
-    pub hash: u32,
-    pub name_size: u32,
+// #[derive(BinRead, Debug)]
+// #[br(little)]
+// pub struct RomFsDirectoryEntry {
+//     pub parent: u32,
+//     pub sibling: u32,
+//     pub child: u32,
+//     pub file: u32,
+//     pub hash: u32,
+//     pub name_size: u32,
 
-    #[br(count = name_size)]
-    pub name: Vec<u8>,
-}
+//     #[br(count = name_size)]
+//     pub name: Vec<u8>,
+// }
 
 #[derive(thiserror::Error, Debug)]
 pub enum RomFsErrors {
     #[error("The romfs is invalid/corrupted")]
     CorruptRomFs(#[from] binrw::Error),
     #[error("Failed to read: {0:?}")]
-    ReadError(#[from] std::io::Error),
+    Read(#[from] std::io::Error),
 }
 
-#[derive(Debug)]
 pub struct RomFs {
     pub header: RomFsHeader,
     pub files: Vec<RomFsFileEntry>,
@@ -106,7 +105,7 @@ impl RomFs {
     }
 
     pub fn get_name_for_entry(&self, entry: &RomFsFileEntry) -> Result<String, FromUtf8Error> {
-        return String::from_utf8(entry.name.clone());
+        String::from_utf8(entry.name.clone())
     }
 
     pub fn get_file<T: ReadAt>(&self, file: &RomFsFileEntry, stream: T) -> FileRegion<T> {

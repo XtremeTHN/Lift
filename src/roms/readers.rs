@@ -53,7 +53,7 @@ impl<T: ReadAt> Seek for FileRegion<T> {
                 self.pos = v;
             }
             SeekFrom::End(v) => {
-                self.pos -= v.abs() as u64;
+                self.pos -= v.unsigned_abs();
             }
         };
 
@@ -157,7 +157,7 @@ impl<T: ReadAt> Read for EncryptedCtrFileRegion<T> {
         let res = self.read_and_decrypt(buf, self.inner.pos)?;
 
         self.inner.pos += res as u64;
-        return Ok(res);
+        Ok(res)
     }
 }
 
@@ -167,12 +167,12 @@ impl<T: ReadAt> ReadAt for EncryptedCtrFileRegion<T> {
             return Ok(0);
         }
 
-        return self.read_and_decrypt(buf, pos);
+        self.read_and_decrypt(buf, pos)
     }
 }
 
 impl<T: ReadAt> Seek for EncryptedCtrFileRegion<T> {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-        return self.inner.seek(pos);
+        self.inner.seek(pos)
     }
 }

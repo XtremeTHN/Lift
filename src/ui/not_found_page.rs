@@ -40,3 +40,5 @@ glib::wrapper! {
         @extends gtk4::Widget, NavigationPage,
         @implements gtk4::Accessible, gtk4::Buildable, gtk4::ConstraintTarget;
 }
+
+// impl NotFoundPage {}
