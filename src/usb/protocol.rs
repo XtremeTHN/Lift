@@ -1,6 +1,7 @@
 use log::{info, warn};
 use rusb::Error;
 use rusb::{ConfigDescriptor, Context, Device, DeviceHandle, UsbContext};
+use std::cell::OnceCell;
 use std::fs::File;
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::string::FromUtf8Error;
@@ -291,10 +292,15 @@ impl SwitchProtocol {
     /// Call find_switch() before using this function
     /// Send the roms before using this function
     pub fn poll_commands(&self) -> ProtocolResult {
+        // let inst: OnceCell<Instance> = OnceCell::new();
+        let mut init = None::<std::time::Instant>;
+
         loop {
             let mut header = vec![0u8; 0x20];
             self.read_with_timeout(&mut header, Duration::from_secs(10))?;
-
+            if init.is_none() {
+                init = Some(std::time::Instant::now());
+            }
             let magic = String::from_utf8(header[0..4].to_vec())?;
             if magic != "TUC0" {
                 return Err(ProtocolError::InvalidMagic(magic));
@@ -323,6 +329,7 @@ impl SwitchProtocol {
                 }
             }
         }
+        log::info!("elapsed: {:?}", init.unwrap().elapsed());
 
         Ok(())
     }

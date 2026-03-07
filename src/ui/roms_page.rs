@@ -1,3 +1,6 @@
+use std::os::fd::AsRawFd;
+
+use ashpd::{WindowIdentifier, desktop::usb::{Device, DeviceID, UsbProxy}};
 use gtk4::{
     CompositeTemplate,
     gio::{
@@ -12,12 +15,12 @@ use glib::subclass::InitializingObject;
 use libadwaita::{NavigationPage, subclass::prelude::*};
 
 use gtk4::glib::types::StaticType;
-use crate::{ui::rom::Rom, utils::send_error};
+use crate::{ui::rom::Rom, usb::{self, async_protocol::SwitchProtocol}, utils::send_error};
 
 mod imp {
 
     use gtk4::gio::ListStore;
-    use std::cell::OnceCell;
+    use std::cell::{OnceCell, RefCell};
 
     use super::*;
 
@@ -39,7 +42,9 @@ mod imp {
         #[template_child]
         pub list_box: TemplateChild<gtk4::ListBox>,
 
-        pub store: OnceCell<ListStore>
+        pub store: OnceCell<ListStore>,
+
+        pub switch_id: RefCell<Option<DeviceID>>,
     }
 
     #[glib::object_subclass]
@@ -58,6 +63,12 @@ mod imp {
 
             klass.install_action_async("open", None, async |page, _, _| {
                 page.open_rom().await;
+            });
+
+            klass.install_action_async("upload", None, async |page, _, _| {
+                if let Err(e) = page.upload().await {
+                    send_error(&page.imp().list_box.clone(), &format!("Couldn't upload: {}", e));
+                };
             });
         }
 
@@ -84,7 +95,26 @@ glib::wrapper! {
         @implements gtk4::Accessible, gtk4::Buildable, gtk4::ConstraintTarget;
 }
 
+#[derive(thiserror::Error, Debug)]
+enum UploadErrors {
+    #[error("couldn't get usb proxy: {0}")]
+    UsbProxyGet(#[from] ashpd::Error),
+    #[error("portal usb error: {0}")]
+    UsbErrorProxy(String),
+    #[error("switch device is none")]
+    SwitchNone,
+    #[error("usb error: {0}")]
+    Usb(#[from] rusb::Error),
+    #[error("usb protocol error: {0}")]
+    Protocol(#[from] usb::async_protocol::ProtocolError)
+}
+
 impl RomsPage {
+    pub fn set_switch_id(&self, id: Option<DeviceID>) {
+        let imp = self.imp();
+        imp.switch_id.replace(id);
+    }
+
     fn setup_list(&self) {
         let obj = self.clone();
         let imp = self.imp();
@@ -163,6 +193,66 @@ impl RomsPage {
                 }
             }
         }
+    }
+
+    async fn send_roms(&self, ctx: &SwitchProtocol) -> Result<(), UploadErrors> {
+        let imp = self.imp();
+
+        let mut files: Vec<String> = vec![];
+
+        let store = imp.store.get().unwrap();
+        for index in 0..store.n_items() {
+            if let Some(obj) = store.item(index) {
+                let f = obj.downcast::<gio::File>();
+                match f {
+                    Ok(file) => {
+                        files.push(file.path().unwrap().to_string_lossy().to_string());
+                    }
+                    Err(_) => {
+                        log::warn!("Couldn't cast file in position {}. Ignoring rom...", index);
+                    }
+                }
+            }
+        }
+
+        ctx.send_roms(files).await?;
+        Ok(())
+    }
+
+    async fn upload(&self) -> Result<(), UploadErrors> {
+        let proxy = UsbProxy::new().await?;
+        let dev_wrapped = {
+            let b = self.imp().switch_id.borrow();
+            b.clone()
+        };
+
+        if dev_wrapped.is_none() {
+            return Err(UploadErrors::SwitchNone);
+        }
+
+        let dev_id = dev_wrapped.unwrap();
+        let root = self.native().unwrap();
+        let handle = WindowIdentifier::from_native(&root).await;
+        let device = Device::new(dev_id, true);
+        let res = proxy.acquire_devices(handle.as_ref(), &[device], Default::default()).await?;
+        
+        if let Some((_, fd_res)) = res.first() {
+            let mut ctx = SwitchProtocol::new()?;
+            
+            match fd_res {
+                Ok(fd) => {
+                    ctx.open_switch_from_fd(fd.as_raw_fd()).await?;
+                }
+                Err(e) => {
+                    return Err(UploadErrors::UsbErrorProxy(e.to_string()));
+                }
+            }
+
+            self.send_roms(&ctx).await?;
+            ctx.poll_commands().await?;
+        };
+
+        Ok(())
     }
 
     async fn clear_all(&self) {

@@ -15,10 +15,10 @@ use std::cell::{Cell, RefCell};
 #[derive(Default)]
 pub enum Color {
     #[default]
-    WHITE = 0,
-    ERROR = 1,
-    WARNING = 2,
-    SUCCESS = 3
+    White = 0,
+    Error = 1,
+    Warning = 2,
+    Success = 3
 }
 
 

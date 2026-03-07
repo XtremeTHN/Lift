@@ -32,6 +32,8 @@ mod imp {
         pub toast: TemplateChild<libadwaita::ToastOverlay>,
         #[template_child]
         pub navigation: TemplateChild<libadwaita::NavigationView>,
+        #[template_child]
+        pub roms_page: TemplateChild<RomsPage>,
 
         pub switch_id: RefCell<String>,
     }
@@ -111,6 +113,7 @@ impl LiftWindow {
                             continue;
                         }
 
+                        obj.roms_page.set_switch_id(Some(x.device_id().clone()));
                         *obj.switch_id.borrow_mut() = x.device_id().to_string();
                         self.add_toast("Switch connected");
                         obj.navigation.push_by_tag("roms-page");
@@ -120,6 +123,7 @@ impl LiftWindow {
                             continue;
                         }
                         self.add_toast("Switch disconnected");
+                        obj.roms_page.set_switch_id(None);
                         obj.navigation.pop_to_tag("switch-not-found");
                     }
                     _ => {
