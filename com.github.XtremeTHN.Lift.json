@@ -13,6 +13,7 @@
         "--socket=fallback-x11",
         "--device=dri",
         "--socket=wayland",
+        "--filesystem=~/.switch",
         "--usb=vnd:057e+dev:3000"
     ],
     "build-options" : {
