@@ -21,9 +21,10 @@ use std::cell::RefCell;
 
 mod imp {
     use gtk4::glib::VariantTy;
+    use libadwaita::prelude::AdwDialogExt;
 
     use super::*;
-    use crate::ui::{not_found_page::NotFoundPage, roms_page::RomsPage};
+    use crate::ui::{not_found_page::NotFoundPage, roms_page::RomsPage, settings::LiftSettings};
 
     #[derive(CompositeTemplate, Default)]
     #[template(resource = "/com/github/XtremeTHN/Lift/window.ui")]
@@ -57,6 +58,11 @@ mod imp {
                 } else {
                     log::warn!("Toast: Argument was not a string");
                 }
+            });
+
+            klass.install_action("win.settings", None, |win, _, _| {
+                let set = LiftSettings::new();
+                set.present(Some(win));
             });
         }
 

@@ -1,6 +1,6 @@
 // use crate::roms::readers::
 
-use std::string::FromUtf8Error;
+use std::{str::FromStr, string::FromUtf8Error};
 
 use binrw::BinRead;
 

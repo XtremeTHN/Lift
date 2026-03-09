@@ -6,6 +6,7 @@
     <file preprocess="xml-stripblanks">not-found-page.ui</file>
     <file preprocess="xml-stripblanks">roms-page.ui</file>
     <file preprocess="xml-stripblanks">rom.ui</file>
+    <file preprocess="xml-stripblanks">settings.ui</file>
   </gresource>
 
   <gresource prefix="/com/github/XtremeTHN/Lift/icons/scalable/actions">
@@ -14,5 +15,6 @@
     <file alias="plus-large-symbolic.svg" preprocess="xml-stripblanks">icons/plus-large-symbolic.svg</file>
     <file alias="drive-harddisk-usb-symbolic.svg" preprocess="xml-stripblanks">icons/drive-harddisk-usb-symbolic.svg</file>
     <file alias="image-missing-symbolic.svg" preprocess="xml-stripblanks">icons/image-missing-symbolic.svg</file>
+    <file alias="settings-symbolic.svg" preprocess="xml-stripblanks">icons/settings-symbolic.svg</file>
   </gresource>
 </gresources>

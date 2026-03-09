@@ -7,7 +7,13 @@ template $NotFoundPage: Adw.NavigationPage {
 
   child: Adw.ToolbarView {
     [top]
-    Adw.HeaderBar {}
+    Adw.HeaderBar {
+      [end]
+      Button {
+        icon-name: "settings-symbolic";
+        action-name: "win.settings";
+      }
+    }
 
     content: Adw.StatusPage {
       icon-name: "drive-harddisk-usb-symbolic";

@@ -1,0 +1,50 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $LiftSettings: Adw.PreferencesDialog {
+    Adw.PreferencesPage {
+        Adw.PreferencesGroup {
+            hexpand: true;
+            title: "Roms";
+            description: _("Change how the rom information shows. Automatic option will choose the language based on the locale");
+
+            Adw.ComboRow lang_row {
+                title: "Language";
+                subtitle: _("Sets the language of the rom information.");
+                notify::selected => $on_title_language_changed() swapped;
+                model: StringList {
+                    strings [
+                        "American English",
+                        "British English",
+                        "Japanese",
+                        "French",
+                        "German",
+                        "Latin American Spanish",
+                        "Spanish",
+                        "Italian",
+                        "Dutch",
+                        "Canadian French",
+                        "Portuguese",
+                        "Russian",
+                        "Korean",
+                        "Traditional Chinese",
+                        "Simplified Chinese",
+                        "Brazilian Portuguese",
+                        "Automatic",
+                    ]
+                };
+            }
+        }
+
+        Adw.PreferencesGroup {
+            title: "Keys path";
+            description: _("Set the path to the keys folder. This is required to get the information of the roms. Default is ~/.switch");
+
+            Adw.EntryRow path_row {
+                title: "Path";
+                show-apply-button: true;
+                apply => $on_path_changed() swapped;
+            }
+        }
+    }
+}

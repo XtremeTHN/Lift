@@ -23,7 +23,7 @@
         ],
         "env" : {
             "RUST_BACKTRACE" : "1",
-            "RUST_LOG" : "d=debug"
+            "RUST_LOG" : "lift=debug"
         }
     },
     "cleanup" : [

@@ -1,5 +1,35 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
+	<enum id="com.github.XtremeTHN.Lift.Languages">
+		<value nick="AmericanEnglish" value="0"/>
+		<value nick="BritishEnglish" value="1"/>
+		<value nick="Japanese" value="2"/>
+		<value nick="French" value="3"/>
+		<value nick="German" value="4"/>
+		<value nick="LatinAmericanSpanish" value="5"/>
+		<value nick="Spanish" value="6"/>
+		<value nick="Italian" value="7"/>
+		<value nick="Dutch" value="8"/>
+		<value nick="CanadianFrench" value="9"/>
+		<value nick="Portuguese" value="10"/>
+		<value nick="Russian" value="11"/>
+		<value nick="Korean" value="12"/>
+		<value nick="TraditionalChinese" value="13"/>
+		<value nick="SimplifiedChinese" value="14"/>
+		<value nick="BrazilianPortuguese" value="15"/>
+		<value nick="Automatic" value="16"/>
+	</enum>
 	<schema id="com.github.XtremeTHN.Lift" path="/com/github/XtremeTHN/Lift/">
+		<key name="language" enum="com.github.XtremeTHN.Lift.Languages">
+			<default>'Automatic'</default>
+			<summary>Language</summary>
+			<description>The language of the rom information</description>
+		</key>
+
+		<key name="keys-path" type="s">
+			<default>'~/.switch'</default>
+			<summary>Switch keys path</summary>
+			<description>The switch keys path. Required to get the information of the roms</description>
+		</key>
 	</schema>
 </schemalist>

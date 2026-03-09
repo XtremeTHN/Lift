@@ -4,6 +4,7 @@ blueprints = custom_target('blueprints',
         'not-found-page.blp',
         'rom.blp',
         'roms-page.blp',
+        'settings.blp'
     ),
     output: '.',
     command: [
