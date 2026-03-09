@@ -1,6 +1,6 @@
 # Lift
 
-A rust application for installing roms on the Nintendo Switch.
+A [nxloader](https://github.com/XtremeTHN/NXLoader) rust port. This port should solve some issues with usb transfers and memory errors.
 
 ## Installation
 Currently only flatpak is supported, cuz this program uses desktop portals to access the switch usb.<br>
