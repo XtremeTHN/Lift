@@ -107,7 +107,7 @@ impl RomInfo {
         pfs: PartitionFs<T>,
         part: R,
     ) -> Result<(Nacp, Option<Vec<u8>>), FindInfoFilesError> {
-        let mut keyring = Keyring::new();
+        let mut keyring = Keyring::from_settings("com.github.XtremeTHN.Lift", "keys-path");
         keyring.parse().expect("error while parsing keyring");
         for (index, entry) in pfs.header.entry_table().iter().enumerate() {
             let name = pfs.get_name_for_entry(entry).expect("failed to get name:");

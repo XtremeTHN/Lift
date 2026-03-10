@@ -1,10 +1,9 @@
+use gtk4::gio::prelude::SettingsExt;
 use hex::{FromHexError, decode};
 use std::fs::File;
 use std::io::Read;
 use std::string::FromUtf8Error;
 use thiserror::Error;
-
-use shellexpand::tilde;
 
 #[derive(Error, Debug)]
 pub enum KeyringErrors {
@@ -24,15 +23,33 @@ pub struct Keyring {
     pub key_area_ocean: Vec<Vec<u8>>,
     pub key_area_system: Vec<Vec<u8>>,
     pub header_key: Vec<u8>,
+    path: String,
 }
 
 impl Keyring {
-    pub fn new() -> Self {
-        Default::default()
+    pub fn new(path: String) -> Self {
+        Self {
+            path,
+            ..Default::default()
+        }
+    }
+
+    pub fn from_settings(schema: &str, key: &str) -> Self {
+        let settings = gtk4::gio::Settings::new(schema);
+
+        let path = settings.string(key);
+        Self::new(path.to_string())
     }
 
     pub fn parse(&mut self) -> Result<(), KeyringErrors> {
-        let mut file = File::open(tilde("~/.switch/prod.keys").to_string())?;
+        let path = if self.path.starts_with("~") {
+            let home = gtk4::glib::home_dir();
+            self.path.replace("~", &home.to_string_lossy())
+        } else {
+            self.path.clone()
+        };
+
+        let mut file = File::open(path)?;
 
         let mut buf = vec![];
         file.read_to_end(&mut buf)?;

@@ -27,9 +27,9 @@
 		</key>
 
 		<key name="keys-path" type="s">
-			<default>'~/.switch'</default>
+			<default>'~/.switch/prod.keys'</default>
 			<summary>Switch keys path</summary>
-			<description>The switch keys path. Required to get the information of the roms</description>
+			<description>The switch 'prod.keys' path. Required to get the information of the roms</description>
 		</key>
 	</schema>
 </schemalist>

@@ -1,11 +1,18 @@
 use glib::subclass::InitializingObject;
-use gtk4::{CompositeTemplate, TemplateChild, gio, glib::{self, Object}, subclass::prelude::*};
+use gtk4::{
+    CompositeTemplate, TemplateChild, gio,
+    glib::{self, Object},
+    subclass::prelude::*,
+};
 use libadwaita::{Dialog, PreferencesDialog, subclass::prelude::*};
 
 mod imp {
     use std::{cell::OnceCell, path::PathBuf};
 
-    use gtk4::{gio::{prelude::{SettingsExt}}, prelude::{EditableExt, WidgetExt}};
+    use gtk4::{
+        gio::prelude::SettingsExt,
+        prelude::{EditableExt, WidgetExt},
+    };
     use libadwaita::prelude::{ComboRowExt, PreferencesDialogExt, PreferencesRowExt};
 
     use super::*;
@@ -17,7 +24,7 @@ mod imp {
         #[template_child]
         pub lang_row: TemplateChild<libadwaita::ComboRow>,
         #[template_child]
-        pub path_row: TemplateChild<libadwaita::EntryRow>
+        pub path_row: TemplateChild<libadwaita::EntryRow>,
     }
 
     #[glib::object_subclass]
@@ -42,7 +49,8 @@ mod imp {
             self.parent_constructed();
             let settings = gio::Settings::new("com.github.XtremeTHN.Lift");
 
-            self.lang_row.set_selected(settings.enum_("language") as u32);
+            self.lang_row
+                .set_selected(settings.enum_("language") as u32);
             self.path_row.set_title(&settings.string("keys-path"));
 
             let _ = self.settings.set(settings);
@@ -51,7 +59,7 @@ mod imp {
     impl WidgetImpl for LiftSettings {}
     impl AdwDialogImpl for LiftSettings {}
     impl PreferencesDialogImpl for LiftSettings {}
-    
+
     #[gtk4::template_callbacks]
     impl LiftSettings {
         fn show_error(&self, msg: String) {
@@ -69,13 +77,19 @@ mod imp {
                 return;
             }
 
-            if !path.is_dir() {
-                self.show_error(format!("\"{}\" is not a directory", path.to_string_lossy()));
+            if !path.is_file() {
+                self.show_error(format!("\"{}\" is not a file", path.to_string_lossy()));
                 return;
             }
 
+            if path.extension().and_then(|e| e.to_str()) != Some("keys") {
+                self.show_error("Invalid keys file. Must have a '.keys' extension".to_string());
+                return;
+            }
 
-            if let Some(settings) = self.settings.get() && let Err(e) = settings.set_string("keys-path", &row_text) {
+            if let Some(settings) = self.settings.get()
+                && let Err(e) = settings.set_string("keys-path", &row_text)
+            {
                 self.show_error(e.to_string());
                 self.path_row.add_css_class("warning");
             };
@@ -83,7 +97,9 @@ mod imp {
 
         #[template_callback]
         fn on_title_language_changed(&self, _: glib::ParamSpec, row: libadwaita::ComboRow) {
-            if let Some(settings) = self.settings.get() && let Err(e) = settings.set_enum("language", row.selected() as i32) {
+            if let Some(settings) = self.settings.get()
+                && let Err(e) = settings.set_enum("language", row.selected() as i32)
+            {
                 self.show_error(e.to_string());
             };
         }
