@@ -1,15 +1,8 @@
-use gtk4::{
-    glib,
-    gio,
-    CompositeTemplate,
-    TemplateChild,
-    prelude::*,
-    subclass::prelude::*
-};
-use libadwaita::{Application, ApplicationWindow, subclass::prelude::*};
-use glib::{Object, subclass::InitializingObject};
 use ashpd::desktop::usb::{UsbEventAction, UsbProxy};
 use futures_util::StreamExt;
+use glib::{Object, subclass::InitializingObject};
+use gtk4::{CompositeTemplate, TemplateChild, gio, glib, prelude::*, subclass::prelude::*};
+use libadwaita::{Application, ApplicationWindow, subclass::prelude::*};
 use std::cell::RefCell;
 
 // use std::{
@@ -74,7 +67,6 @@ mod imp {
     impl ObjectImpl for LiftWindow {
         fn constructed(&self) {
             self.parent_constructed();
-
             self.obj().setup_usb_finder();
         }
     }

@@ -7,7 +7,7 @@ use ashpd::{
 };
 use async_channel::Receiver;
 use gtk4::{
-    CompositeTemplate,
+    CompositeTemplate, gdk,
     gio::{
         self, ListModel,
         prelude::{CancellableExt, FileExt, ListModelExt, SettingsExt},
@@ -118,13 +118,60 @@ mod imp {
             self.store
                 .set(gio::ListStore::with_type(gio::File::static_type()))
                 .unwrap();
-            let settings = gio::Settings::new("com.github.XtremeTHN.Lift");
-            let _ = self._settings.set(settings);
+
             self.obj().setup_list();
+            self.setup_settings();
+            self.setup_drag_and_drop();
         }
     }
     impl WidgetImpl for RomsPage {}
     impl NavigationPageImpl for RomsPage {}
+
+    impl RomsPage {
+        fn setup_settings(&self) {
+            let settings = gio::Settings::new("com.github.XtremeTHN.Lift");
+            let _ = self._settings.set(settings);
+        }
+
+        fn setup_drag_and_drop(&self) {
+            let formats = gdk::ContentFormats::for_type(gdk::FileList::static_type());
+            // let target = gtk4::DropTarget::new(_type, gdk::DragAction::COPY);
+            let target = gtk4::DropTarget::builder()
+                .formats(&formats)
+                .actions(gdk::DragAction::COPY)
+                .build();
+
+            target.connect_enter(|_, _x, _y| gdk::DragAction::COPY);
+            target.connect_motion(|_, _x, _y| gdk::DragAction::COPY);
+
+            let obj = self.obj().clone();
+            target.connect_drop(move |_, values, _x, _y| {
+                match values.get::<gdk::FileList>() {
+                    Ok(list) => {
+                        for x in list.files() {
+                            let path = x.path().unwrap();
+                            let extension = path.extension().and_then(|e| e.to_str());
+                            if extension != Some("nsp") && extension != Some("xci") {
+                                send_error(
+                                    &obj,
+                                    &format!("File {} is not a rom", path.to_string_lossy()),
+                                );
+                                continue;
+                            }
+
+                            obj.append_to_store(x);
+                        }
+                    }
+                    Err(e) => {
+                        send_error(&obj, &format!("Couldn't get dropped files: {:?}", e));
+                    }
+                }
+                true
+            });
+
+            self.stack.add_controller(target);
+        }
+    }
 }
 
 glib::wrapper! {
@@ -201,6 +248,13 @@ impl RomsPage {
         );
     }
 
+    fn append_to_store(&self, f: gio::File) {
+        let imp = self.imp();
+        imp.store.get().unwrap().append(&f);
+        imp.stack.set_visible_child_name("roms");
+        self.action_set_enabled("clear-all", true);
+    }
+
     async fn open_rom(&self) {
         let filter = gtk4::FileFilter::new();
         filter.add_suffix("xci");
@@ -231,17 +285,9 @@ impl RomsPage {
 
         let files = res.unwrap();
 
-        let obj = self.imp();
+        let obj = self.clone();
         self.iterate_model(files, |f, _| {
-            let path = f.path();
-
-            if path.is_none() {
-                return true;
-            }
-
-            obj.store.get().unwrap().append(&f);
-            obj.stack.set_visible_child_name("roms");
-            self.action_set_enabled("clear-all", true);
+            obj.append_to_store(f);
             true
         });
     }
