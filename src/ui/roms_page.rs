@@ -1,13 +1,21 @@
 use std::os::fd::AsRawFd;
 
-use ashpd::{WindowIdentifier, desktop::usb::{Device, DeviceID, UsbError, UsbProxy}, zvariant::OwnedFd};
+use ashpd::{
+    WindowIdentifier,
+    desktop::usb::{Device, DeviceID, UsbError, UsbProxy},
+    zvariant::OwnedFd,
+};
 use async_channel::Receiver;
 use gtk4::{
     CompositeTemplate,
     gio::{
-        self, ListModel, prelude::{CancellableExt, FileExt, ListModelExt}
+        self, ListModel,
+        prelude::{CancellableExt, FileExt, ListModelExt, SettingsExt},
     },
-    glib::{self, object::{Cast, CastNone, ObjectExt}},
+    glib::{
+        self,
+        object::{Cast, CastNone, ObjectExt},
+    },
     prelude::{WidgetExt, WidgetExtManual},
     subclass::prelude::*,
 };
@@ -15,13 +23,22 @@ use gtk4::{
 use glib::subclass::InitializingObject;
 use libadwaita::{NavigationPage, subclass::prelude::*};
 
-
+use crate::{
+    ui::rom::Rom,
+    usb::{
+        self,
+        async_protocol::{SwitchProtocol, UsbOperation},
+    },
+    utils::send_error,
+};
 use gtk4::glib::types::StaticType;
-use crate::{ui::rom::Rom, usb::{self, async_protocol::{SwitchProtocol, UsbOperation}}, utils::send_error};
 
 mod imp {
 
-    use gtk4::{gio::{Cancellable, ListStore}, glib::SourceId};
+    use gtk4::{
+        gio::{Cancellable, ListStore},
+        glib::SourceId,
+    };
     use std::cell::{OnceCell, RefCell};
 
     use super::*;
@@ -48,6 +65,7 @@ mod imp {
         pub top_button_stack: TemplateChild<gtk4::Stack>,
 
         pub store: OnceCell<ListStore>,
+        pub _settings: OnceCell<gio::Settings>,
 
         pub switch_id: RefCell<Option<DeviceID>>,
         pub pulse_id: RefCell<Option<SourceId>>,
@@ -76,7 +94,10 @@ mod imp {
 
             klass.install_action_async("upload", None, async |page, _, _| {
                 if let Err(e) = page.upload().await {
-                    send_error(&page.imp().list_box.clone(), &format!("Couldn't upload: {}", e));
+                    send_error(
+                        &page.imp().list_box.clone(),
+                        &format!("Couldn't upload: {}", e),
+                    );
                 };
             });
 
@@ -94,7 +115,11 @@ mod imp {
         fn constructed(&self) {
             self.parent_constructed();
 
-            self.store.set(gio::ListStore::with_type(gio::File::static_type())).unwrap();
+            self.store
+                .set(gio::ListStore::with_type(gio::File::static_type()))
+                .unwrap();
+            let settings = gio::Settings::new("com.github.XtremeTHN.Lift");
+            let _ = self._settings.set(settings);
             self.obj().setup_list();
         }
     }
@@ -119,7 +144,7 @@ enum UploadErrors {
     #[error("usb error: {0}")]
     Usb(#[from] rusb::Error),
     #[error("usb protocol error: {0}")]
-    Protocol(#[from] usb::async_protocol::ProtocolError)
+    Protocol(#[from] usb::async_protocol::ProtocolError),
 }
 
 impl RomsPage {
@@ -150,6 +175,11 @@ impl RomsPage {
             rom.set_file(Some(f.unwrap()));
             rom.set_store(Some(imp.store.get().unwrap().clone()));
 
+            let settings = imp._settings.get().unwrap();
+            if let Err(e) = rom.set_language(settings.enum_("language")) {
+                send_error(&_obj, &e.to_string());
+            }
+
             let r = rom.clone();
             glib::MainContext::default().spawn_local(async move {
                 r.populate().await;
@@ -159,12 +189,16 @@ impl RomsPage {
         });
 
         let s = store.clone();
-        store.connect_closure("items-changed", true, glib::closure_local!(move |_: ListModel, _: u32, removed: u32, _: u32| {
-            if removed > 0 && s.n_items() == 0 {
-                obj.imp().stack.set_visible_child_name("placeholder");
-                obj.action_set_enabled("clear-all", false);
-            }
-        }));
+        store.connect_closure(
+            "items-changed",
+            true,
+            glib::closure_local!(move |_: ListModel, _: u32, removed: u32, _: u32| {
+                if removed > 0 && s.n_items() == 0 {
+                    obj.imp().stack.set_visible_child_name("placeholder");
+                    obj.action_set_enabled("clear-all", false);
+                }
+            }),
+        );
     }
 
     async fn open_rom(&self) {
@@ -279,19 +313,21 @@ impl RomsPage {
         imp.total_progress.set_fraction(0.0);
         imp.total_size.replace(0);
         imp.sent_bytes.replace(0);
-        
+
         imp.top_button_stack.set_sensitive(true);
         imp.top_button_stack.set_visible_child_name("upload");
         self.action_set_enabled("upload", true);
         self.iterate_store(|_, index| {
             let wrapped_row = imp.list_box.row_at_index(index as i32);
-            if let Some(row) = wrapped_row && let Ok(rom) = row.downcast::<Rom>() {
+            if let Some(row) = wrapped_row
+                && let Ok(rom) = row.downcast::<Rom>()
+            {
                 rom.reset_state();
             }
             true
         });
     }
-    
+
     fn set_pulse(&self, pulse: bool) {
         let imp = self.imp();
         if pulse {
@@ -320,7 +356,7 @@ impl RomsPage {
             imp.total_progress.set_fraction(sent as f64 / total as f64);
         }
     }
-    
+
     fn recieve_callbacks(&self, reciever: Receiver<UsbOperation>) {
         let obj = self.clone();
         glib::MainContext::default().spawn_local(async move {
@@ -349,11 +385,13 @@ impl RomsPage {
                         obj.reset_state();
                     }
                 }
-            }  
+            }
         });
     }
 
-    async fn acquire_switch(&self) -> Result<Vec<(DeviceID, Result<OwnedFd, UsbError>)>, UploadErrors> {
+    async fn acquire_switch(
+        &self,
+    ) -> Result<Vec<(DeviceID, Result<OwnedFd, UsbError>)>, UploadErrors> {
         let proxy = UsbProxy::new().await?;
         let dev_wrapped = {
             let b = self.imp().switch_id.borrow();
@@ -368,8 +406,9 @@ impl RomsPage {
         let root = self.native().unwrap();
         let handle = WindowIdentifier::from_native(&root).await;
         let device = Device::new(dev_id, true);
-        Ok(proxy.acquire_devices(handle.as_ref(), &[device], Default::default()).await?)
-
+        Ok(proxy
+            .acquire_devices(handle.as_ref(), &[device], Default::default())
+            .await?)
     }
 
     fn calculate_total_size(&self) {
@@ -378,7 +417,8 @@ impl RomsPage {
             let row = imp.list_box.row_at_index(index as i32).unwrap();
 
             if let Ok(rom) = row.downcast::<Rom>() {
-                imp.total_size.replace_with(|&mut old| old + rom.imp().size.get() as u64);
+                imp.total_size
+                    .replace_with(|&mut old| old + rom.imp().size.get() as u64);
             }
             true
         });
@@ -390,7 +430,7 @@ impl RomsPage {
 
         if let Some((_, fd_res)) = res.first() {
             let mut ctx = SwitchProtocol::new()?;
-            
+
             match fd_res {
                 Ok(fd) => {
                     ctx.open_switch_from_fd(fd.as_raw_fd()).await?;

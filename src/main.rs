@@ -29,6 +29,5 @@ fn main() {
         win.present();
     });
 
-
     _app.run();
 }

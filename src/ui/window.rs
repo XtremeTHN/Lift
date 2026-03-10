@@ -101,7 +101,7 @@ impl LiftWindow {
         Object::builder().property("application", app).build()
     }
 
-    async fn setup_finder(&self) {
+    async fn spawn_finder(&self) {
         let obj = self.imp();
         let proxy = UsbProxy::new().await.expect("err");
         let _ = proxy.create_session(Default::default()).await.expect("err");
@@ -112,7 +112,7 @@ impl LiftWindow {
             let events = event.events();
 
             for x in events {
-                log::debug!("setup_finder(): Event {:#?}", x);
+                log::debug!("spawn_finder(): Event {:#?}", x);
                 match x.action() {
                     UsbEventAction::Add => {
                         if x.device().vendor().unwrap_or(String::new()) != "Nintendo Co., Ltd" {
@@ -143,7 +143,7 @@ impl LiftWindow {
     fn setup_usb_finder(&self) {
         let obj = self.clone();
         glib::MainContext::default().spawn_local(async move {
-            obj.setup_finder().await;
+            obj.spawn_finder().await;
         });
     }
 

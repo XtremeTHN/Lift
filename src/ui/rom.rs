@@ -1,4 +1,7 @@
-use std::{cell::{RefCell, Cell}, path::PathBuf};
+use std::{
+    cell::{Cell, OnceCell, RefCell},
+    path::PathBuf,
+};
 
 use gtk4::{
     CompositeTemplate, ListBoxRow, gdk,
@@ -13,10 +16,16 @@ use gtk4::{
 
 use glib::subclass::InitializingObject;
 
-use crate::{rom_info::RomInfo, utils::send_error};
 use super::circular_progress_paintable::{CircularProgressPaintable, Color};
+use crate::{
+    rom_info::RomInfo,
+    roms::formats::nacp::{TitleLanguage, TitleLanguageErrors},
+    utils::send_error,
+};
 
 mod imp {
+    use crate::roms::formats::nacp::TitleLanguage;
+
     use super::*;
 
     #[derive(CompositeTemplate, Default)]
@@ -53,6 +62,7 @@ mod imp {
         pub size: Cell<i64>,
         pub file: RefCell<Option<gio::File>>,
         pub store: RefCell<Option<ListStore>>,
+        pub language: OnceCell<TitleLanguage>,
     }
 
     #[glib::object_subclass]
@@ -95,6 +105,18 @@ impl Rom {
         Object::builder().build()
     }
 
+    pub fn set_language(&self, _language: i32) -> Result<(), TitleLanguageErrors> {
+        let language = TitleLanguage::try_from(_language).unwrap();
+        let l = if language == TitleLanguage::Automatic {
+            TitleLanguage::from_system_locale()?
+        } else {
+            language
+        };
+
+        let _ = self.imp().language.set(l);
+        Ok(())
+    }
+
     pub fn set_store(&self, store: Option<ListStore>) {
         self.imp().store.replace(store);
     }
@@ -112,7 +134,7 @@ impl Rom {
     async fn setup_size(&self) {
         let imp = self.imp();
         let file = {
-            let f =imp.file.borrow();
+            let f = imp.file.borrow();
             f.clone()
         };
 
@@ -129,7 +151,7 @@ impl Rom {
                 glib::Priority::DEFAULT,
             )
             .await;
-            
+
         if let Ok(s) = querier {
             println!("size {}", s.size());
             imp.size.set(s.size());
@@ -150,7 +172,9 @@ impl Rom {
 
     pub fn add_progress(&self, read_size: u64) {
         let imp = self.imp();
-        imp.prog_bar.imp().add_progress(read_size as f64 / imp.size.get() as f64);
+        imp.prog_bar
+            .imp()
+            .add_progress(read_size as f64 / imp.size.get() as f64);
 
         if imp.prog_bar.imp().progress.get() == 1.0 {
             imp.prog_bar.imp().set_color(Color::Success);
@@ -176,8 +200,10 @@ impl Rom {
 
         let send = sender.clone();
         let _path = path.clone();
+
+        let lang = imp.language.clone();
         gio::spawn_blocking(move || {
-            let rom_info = RomInfo::new(_path);
+            let rom_info = RomInfo::new(_path, *lang.get().unwrap());
             if let Err(e) = rom_info {
                 send.send_blocking((None, Some(e.to_string())))
                     .expect("failed to send data");
@@ -225,10 +251,7 @@ impl Rom {
                             obj.icon.set_paintable(Some(&t));
                         }
                         Err(e) => {
-                            send_error(
-                                self,
-                                &format!("Couldn't construct texture: {}", e),
-                            );
+                            send_error(self, &format!("Couldn't construct texture: {}", e));
                         }
                     }
                 }
@@ -296,10 +319,11 @@ impl Rom {
 
         for i in 0..s.clone().n_items() {
             if let Some(item) = s.item(i)
-                && item.downcast_ref::<gio::File>() == Some(f) {
-                    s.remove(i);
-                    break;
-                }
+                && item.downcast_ref::<gio::File>() == Some(f)
+            {
+                s.remove(i);
+                break;
+            }
         }
     }
 }

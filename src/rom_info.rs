@@ -1,12 +1,26 @@
-use std::{fs::File, io::{Read, Seek}, path::PathBuf, string::FromUtf8Error};
+use std::{
+    fs::File,
+    io::{Read, Seek},
+    path::PathBuf,
+    string::FromUtf8Error,
+};
 
 use binrw::BinRead;
-use gtk4::{
-    glib
-};
+use gtk4::glib;
 use positioned_io::ReadAt;
 
-use crate::roms::{formats::{nacp::{Nacp, TitleLanguage}, nca::{ContentType, Nca, NcaErrors}, xci::{Xci, XciErrors}}, fs::{pfs::{PFSHeader, PartitionFs, PartitionFsErrors}, romfs::RomFs}, keyring::{Keyring, KeyringErrors}};
+use crate::roms::{
+    formats::{
+        nacp::{Nacp, TitleLanguage},
+        nca::{ContentType, Nca, NcaErrors},
+        xci::{Xci, XciErrors},
+    },
+    fs::{
+        pfs::{PFSHeader, PartitionFs, PartitionFsErrors},
+        romfs::RomFs,
+    },
+    keyring::{Keyring, KeyringErrors},
+};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -16,7 +30,7 @@ pub enum PopulateError {
     #[error("File {0} has an invalid extension")]
     NotARom(String),
     #[error("Handle error: {0}")]
-    HandleErr(#[from] HandleError)
+    HandleErr(#[from] HandleError),
 }
 
 #[derive(Error, Debug)]
@@ -34,7 +48,7 @@ pub enum FindInfoFilesError {
     #[error("Error while reading entry: {0}")]
     IOError(#[from] std::io::Error),
     #[error("Couldn't find nacp file")]
-    NacpNotFound
+    NacpNotFound,
 }
 
 #[derive(Error, Debug)]
@@ -50,7 +64,7 @@ pub enum HandleError {
     #[error("Error while trying to find info files: {0}")]
     FindError(#[from] FindInfoFilesError),
     #[error("Error while decoding nacp fields: {0}")]
-    DecodingError(#[from] FromUtf8Error)
+    DecodingError(#[from] FromUtf8Error),
 }
 
 pub struct RomInfo {
@@ -63,14 +77,14 @@ pub struct RomInfo {
 }
 
 impl RomInfo {
-    pub fn new(path: PathBuf) -> std::io::Result<Self> {
+    pub fn new(path: PathBuf, language: TitleLanguage) -> std::io::Result<Self> {
         let file = File::open(&path)?;
-        
+
         Ok(Self {
             title: None,
             version: None,
             image_data: None,
-            language: TitleLanguage::AmericanEnglish,
+            language,
             file,
             path,
         })
@@ -126,7 +140,7 @@ impl RomInfo {
                     if ext_unwrapped == "dat" && texture.is_none() {
                         let mut buf = vec![0u8; x.size as usize];
                         let mut reg = rom_fs.get_file(x, &mut fs);
-                        
+
                         reg.read_exact(&mut buf)?;
 
                         texture = Some(buf);
@@ -180,17 +194,11 @@ impl RomInfo {
         }
 
         match extension.unwrap().to_str().unwrap() {
-            "nsp" => {
-                Ok(self.handle_nsp()?)
-            }
+            "nsp" => Ok(self.handle_nsp()?),
 
-            "xci" => {
-                Ok(self.handle_xci()?)
-            }
+            "xci" => Ok(self.handle_xci()?),
 
-            _ => {
-                Err(PopulateError::NotARom(path_str))
-            }
+            _ => Err(PopulateError::NotARom(path_str)),
         }
     }
 }
