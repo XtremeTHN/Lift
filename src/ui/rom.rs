@@ -153,7 +153,6 @@ impl Rom {
             .await;
 
         if let Ok(s) = querier {
-            println!("size {}", s.size());
             imp.size.set(s.size());
         }
     }

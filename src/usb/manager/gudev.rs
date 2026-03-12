@@ -63,7 +63,6 @@ impl UsbBackend for GUdevBackend {
                 return;
             }
 
-            println!("{}", dev.property("PRODUCT").unwrap());
             if let Some(product) = dev.property("PRODUCT")
                 && product != "57e/3000/100"
             {

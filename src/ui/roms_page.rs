@@ -448,7 +448,6 @@ impl RomsPage {
     async fn upload(&self) -> Result<(), UploadErrors> {
         let backend_wrapped = self.imp().backend.get();
         if backend_wrapped.is_none() {
-            println!("none");
             return Err(UploadErrors::SwitchNone);
         }
 
