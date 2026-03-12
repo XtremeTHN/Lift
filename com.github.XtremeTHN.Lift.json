@@ -42,6 +42,9 @@
             "name" : "lift",
             "builddir" : true,
             "buildsystem" : "meson",
+            "config-opts": [
+                "-Dportal=true"
+            ],
             "sources" : [
                 {
                     "type" : "git",

@@ -1,9 +1,19 @@
-use ashpd::desktop::usb::{UsbEventAction, UsbProxy};
+use async_channel::Receiver;
 use futures_util::StreamExt;
 use glib::{Object, subclass::InitializingObject};
-use gtk4::{CompositeTemplate, TemplateChild, gio, glib, prelude::*, subclass::prelude::*};
+use gtk4::{
+    CompositeTemplate, TemplateChild, gio,
+    glib::{self, property::PropertySet},
+    prelude::*,
+    subclass::prelude::*,
+};
 use libadwaita::{Application, ApplicationWindow, subclass::prelude::*};
-use std::cell::RefCell;
+use std::{cell::RefCell, rc::Rc};
+
+use crate::{
+    usb::manager::{Backend, DeviceAction, UsbBackend},
+    utils::{self, send_error},
+};
 
 // use std::{
 //     borrow::Borrow,
@@ -13,6 +23,8 @@ use std::cell::RefCell;
 // };
 
 mod imp {
+    use std::cell::OnceCell;
+
     use gtk4::glib::VariantTy;
     use libadwaita::prelude::AdwDialogExt;
 
@@ -29,6 +41,7 @@ mod imp {
         #[template_child]
         pub roms_page: TemplateChild<RomsPage>,
 
+        pub backend: OnceCell<Rc<Backend>>,
         pub switch_id: RefCell<String>,
     }
 
@@ -93,41 +106,15 @@ impl LiftWindow {
         Object::builder().property("application", app).build()
     }
 
-    async fn spawn_finder(&self) {
-        let obj = self.imp();
-        let proxy = UsbProxy::new().await.expect("err");
-        let _ = proxy.create_session(Default::default()).await.expect("err");
-
-        let mut stream = proxy.receive_device_events().await.expect("ERRS");
-
-        while let Some(event) = stream.next().await {
-            let events = event.events();
-
-            for x in events {
-                log::debug!("spawn_finder(): Event {:#?}", x);
-                match x.action() {
-                    UsbEventAction::Add => {
-                        if x.device().vendor().unwrap_or(String::new()) != "Nintendo Co., Ltd" {
-                            continue;
-                        }
-
-                        obj.roms_page.set_switch_id(Some(x.device_id().clone()));
-                        *obj.switch_id.borrow_mut() = x.device_id().to_string();
-                        self.add_toast("Switch connected");
-                        obj.navigation.push_by_tag("roms-page");
-                    }
-                    UsbEventAction::Remove => {
-                        if x.device_id().as_str() != obj.switch_id.borrow().as_str() {
-                            continue;
-                        }
-                        self.add_toast("Switch disconnected");
-                        obj.roms_page.set_switch_id(None);
-                        obj.navigation.pop_to_tag("switch-not-found");
-                    }
-                    _ => {
-                        continue;
-                    }
+    async fn recieve_events(&self, receiver: Receiver<DeviceAction>, backend: Rc<Backend>) {
+        let imp = self.imp();
+        imp.roms_page.set_backend(backend);
+        while let Ok(e) = receiver.recv().await {
+            match e {
+                DeviceAction::Add => {
+                    imp.navigation.push_by_tag("roms-page");
                 }
+                DeviceAction::Remove => {}
             }
         }
     }
@@ -135,7 +122,39 @@ impl LiftWindow {
     fn setup_usb_finder(&self) {
         let obj = self.clone();
         glib::MainContext::default().spawn_local(async move {
-            obj.spawn_finder().await;
+            // obj.spawn_finder().await;
+            let (sender, receiver) = async_channel::bounded(1);
+            match Backend::new(sender).await {
+                Ok(backend) => {
+                    let native = obj.native().unwrap();
+                    backend.set_native(native);
+
+                    let backend = Rc::new(backend);
+                    let _ = obj.imp().backend.set(backend.clone());
+
+                    // start backend loop
+                    {
+                        let obj = obj.clone();
+                        let _backend = backend.clone();
+                        glib::MainContext::default().spawn_local(async move {
+                            if let Err(e) = _backend.clone().start().await {
+                                utils::send_error(&obj, &e.to_string());
+                            }
+                        });
+                    }
+
+                    // receive events loop
+                    {
+                        let obj = obj.clone();
+                        glib::MainContext::default().spawn_local(async move {
+                            obj.recieve_events(receiver, backend.clone()).await;
+                        });
+                    }
+                }
+                Err(e) => {
+                    utils::send_error(&obj, &e.to_string());
+                }
+            }
         });
     }
 

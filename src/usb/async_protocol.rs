@@ -1,22 +1,24 @@
+use ashpd::zvariant::OwnedFd;
+use binrw::BinRead;
 use gtk4::gio::prelude::{CancellableExt, FileExt, InputStreamExt, SeekableExt};
 use log::{info, warn};
 use rusb::Error;
 use rusb::{ConfigDescriptor, Context, DeviceHandle, UsbContext};
 use std::io::Cursor;
+use std::os::fd::AsRawFd;
 use std::string::FromUtf8Error;
-use binrw::BinRead;
 
 use gtk4::{gio, glib};
 use std::sync::Arc;
 
-use async_channel::Sender;
 use super::daemon::{UsbCommand, spawn_daemon};
+use async_channel::Sender;
 
 #[repr(u32)]
 enum ProtocolCommand {
     Exit = 1,
     FileRange = 2,
-    FileRangePadded = 3
+    FileRangePadded = 3,
 }
 
 impl TryFrom<u32> for ProtocolCommand {
@@ -45,7 +47,7 @@ struct FileHeader {
 pub enum UsbOperation {
     File(Arc<str>, u64),
     Exit,
-    Wait
+    Wait,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -65,7 +67,9 @@ pub enum ProtocolError {
     #[error("gio::File error: {0}")]
     File(#[from] glib::Error),
     #[error("Invalid magic: {0}")]
-    InvalidMagic(String)
+    InvalidMagic(String),
+    #[error("switch not found")]
+    SwitchNotFound,
 }
 
 type ProtocolResult<T> = Result<T, ProtocolError>;
@@ -82,7 +86,8 @@ const FILE_HEADER_SIZE: usize = 0x20;
 
 pub struct SwitchProtocol {
     pub ctx: Context,
-    daemon_sender: Option<Sender<UsbCommand>>
+    daemon_sender: Option<Sender<UsbCommand>>,
+    fd: Option<OwnedFd>,
 }
 
 impl SwitchProtocol {
@@ -91,14 +96,14 @@ impl SwitchProtocol {
 
         Ok(Self {
             ctx,
-            daemon_sender: None
+            daemon_sender: None,
+            fd: None,
         })
     }
 
-    pub async fn open_switch_from_fd(&mut self, fd: i32) -> ProtocolResult<()> {
-        let handle = unsafe {
-            self.ctx.open_device_with_fd(fd)
-        }?;
+    pub async fn open_switch_from_fd(&mut self, fd: OwnedFd) -> ProtocolResult<()> {
+        let handle = unsafe { self.ctx.open_device_with_fd(fd.as_raw_fd()) }?;
+        self.fd = Some(fd);
 
         self.spawn_usb(handle).await?;
 
@@ -140,7 +145,11 @@ impl SwitchProtocol {
     /// Handles the commands sent by the switch
     /// Call find_switch() before using this function
     /// Send the roms before using this function
-    pub async fn poll_commands(&mut self, cancellable: Option<gio::Cancellable>, sender: Sender<UsbOperation>) -> ProtocolResult<()> {
+    pub async fn poll_commands(
+        &mut self,
+        cancellable: Option<gio::Cancellable>,
+        sender: Sender<UsbOperation>,
+    ) -> ProtocolResult<()> {
         let _cancellable = if let Some(c) = cancellable {
             c
         } else {
@@ -188,11 +197,12 @@ impl SwitchProtocol {
         Ok(())
     }
 
-    async fn spawn_usb(&mut self, handle: DeviceHandle<Context>) -> ProtocolResult<()> {
+    pub async fn spawn_usb(&mut self, handle: DeviceHandle<Context>) -> ProtocolResult<()> {
         self.send_exit().await?;
 
         let dev = handle.device();
-        let (in_endpoint, out_endpoint, interface) = self.find_endpoints(dev.active_config_descriptor()?)?;
+        let (in_endpoint, out_endpoint, interface) =
+            self.find_endpoints(dev.active_config_descriptor()?)?;
         handle.claim_interface(interface)?;
         let sender = spawn_daemon(handle, in_endpoint, out_endpoint, interface);
         self.daemon_sender = Some(sender);
@@ -205,7 +215,7 @@ impl SwitchProtocol {
         let mut out_endpoint: Option<u8> = None;
 
         let mut interface_num: Option<u8> = None;
-        
+
         for interface in conf_desc.interfaces() {
             for altsetting in interface.descriptors() {
                 for endpoint in altsetting.endpoint_descriptors() {
@@ -230,16 +240,22 @@ impl SwitchProtocol {
             return Err(ProtocolError::EndpointNotFound(String::from("OUT")));
         }
 
-        Ok((in_endpoint.unwrap(), out_endpoint.unwrap(), interface_num.unwrap()))
+        Ok((
+            in_endpoint.unwrap(),
+            out_endpoint.unwrap(),
+            interface_num.unwrap(),
+        ))
     }
 
     async fn write(&self, buf: &[u8]) -> ProtocolResult<()> {
         let sender = self.daemon_sender.as_ref().unwrap();
 
         let (_send, rec) = async_channel::bounded(1);
-        
+
         // i think `buf.to_vec()` is going to be a problem
-        sender.send(UsbCommand::Write(buf.to_vec(), _send, 1)).await?;
+        sender
+            .send(UsbCommand::Write(buf.to_vec(), _send, 1))
+            .await?;
         rec.recv().await??;
 
         Ok(())
@@ -272,14 +288,18 @@ impl SwitchProtocol {
 
         let mut cur = Cursor::new(header);
         let mut file_header = FileHeader::read(&mut cur)?;
-        
+
         let raw_name = self.read(file_header.rom_name_length as usize).await?;
         file_header.name = String::from_utf8(raw_name)?;
 
         Ok(file_header)
     }
 
-    async fn send_file_response_header(&self, cmd_id: ProtocolCommand, data_size: u64) -> ProtocolResult<()> {
+    async fn send_file_response_header(
+        &self,
+        cmd_id: ProtocolCommand,
+        data_size: u64,
+    ) -> ProtocolResult<()> {
         self.write("TUC0".as_bytes()).await?;
         self.write(&[1]).await?;
         self.write(&PAD_3).await?; // padding 1
@@ -290,7 +310,12 @@ impl SwitchProtocol {
         Ok(())
     }
 
-    async fn send_file(&self, padded: bool, sender: &Sender<UsbOperation>, cancellable: &gio::Cancellable) -> ProtocolResult<()> {
+    async fn send_file(
+        &self,
+        padded: bool,
+        sender: &Sender<UsbOperation>,
+        cancellable: &gio::Cancellable,
+    ) -> ProtocolResult<()> {
         let cmd = if padded {
             ProtocolCommand::FileRangePadded
         } else {
@@ -300,12 +325,17 @@ impl SwitchProtocol {
         let header = self.recieve_file().await?;
         info!("Requested file: {}", header.name);
 
-        self.send_file_response_header(cmd, header.range_size).await?;
+        self.send_file_response_header(cmd, header.range_size)
+            .await?;
 
         let file = gio::File::for_path(&header.name);
         let stream = file.read(None::<&gio::Cancellable>)?;
 
-        stream.seek(header.range_offset as i64, glib::SeekType::Set, None::<&gio::Cancellable>)?;
+        stream.seek(
+            header.range_offset as i64,
+            glib::SeekType::Set,
+            None::<&gio::Cancellable>,
+        )?;
 
         let mut current_offset: u64 = 0x0;
         let mut read_size = BUFFER_SEGMENT_DATA_SIZE;
@@ -320,13 +350,18 @@ impl SwitchProtocol {
             }
 
             // let slice = &mut buffer[data_start..data_start + read_size as usize];
-            let bytes = stream.read_bytes_future(read_size as usize, glib::Priority::DEFAULT).await?;
+            let bytes = stream
+                .read_bytes_future(read_size as usize, glib::Priority::DEFAULT)
+                .await?;
             let slice = bytes.as_ref();
 
             buffer[data_start..data_start + slice.len()].copy_from_slice(slice);
-            
-            self.write(&buffer[..data_start + read_size as usize]).await?;
-            sender.send(UsbOperation::File(name.clone(), read_size)).await;
+
+            self.write(&buffer[..data_start + read_size as usize])
+                .await?;
+            sender
+                .send(UsbOperation::File(name.clone(), read_size))
+                .await;
             current_offset += read_size;
         }
 
@@ -342,7 +377,7 @@ impl Drop for SwitchProtocol {
                 log::error!("usb daemon couldn't exit: {:?}", e);
                 return;
             }
-            
+
             let _ = reciever.recv_blocking().expect("failed to exit the daemon");
         }
     }

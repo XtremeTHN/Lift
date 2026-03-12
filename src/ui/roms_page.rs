@@ -1,10 +1,3 @@
-use std::os::fd::AsRawFd;
-
-use ashpd::{
-    WindowIdentifier,
-    desktop::usb::{Device, DeviceID, UsbError, UsbProxy},
-    zvariant::OwnedFd,
-};
 use async_channel::Receiver;
 use gtk4::{
     CompositeTemplate, gdk,
@@ -19,6 +12,7 @@ use gtk4::{
     prelude::{WidgetExt, WidgetExtManual},
     subclass::prelude::*,
 };
+use std::{os::fd::AsRawFd, rc::Rc};
 
 use glib::subclass::InitializingObject;
 use libadwaita::{NavigationPage, subclass::prelude::*};
@@ -28,6 +22,7 @@ use crate::{
     usb::{
         self,
         async_protocol::{SwitchProtocol, UsbOperation},
+        manager::{Backend, UsbBackend, UsbBackendErrors},
     },
     utils::send_error,
 };
@@ -39,7 +34,9 @@ mod imp {
         gio::{Cancellable, ListStore},
         glib::SourceId,
     };
+
     use std::cell::{OnceCell, RefCell};
+    use std::rc::Rc;
 
     use super::*;
 
@@ -67,7 +64,7 @@ mod imp {
         pub store: OnceCell<ListStore>,
         pub _settings: OnceCell<gio::Settings>,
 
-        pub switch_id: RefCell<Option<DeviceID>>,
+        pub backend: OnceCell<Rc<Backend>>,
         pub pulse_id: RefCell<Option<SourceId>>,
         pub total_size: RefCell<u64>,
         pub sent_bytes: RefCell<u64>,
@@ -182,22 +179,22 @@ glib::wrapper! {
 
 #[derive(thiserror::Error, Debug)]
 enum UploadErrors {
-    #[error("couldn't get usb proxy: {0}")]
-    UsbProxyGet(#[from] ashpd::Error),
     #[error("portal usb error: {0}")]
     UsbErrorProxy(String),
     #[error("switch device is none")]
     SwitchNone,
     #[error("usb error: {0}")]
     Usb(#[from] rusb::Error),
+    #[error("backend error: {0}")]
+    Backend(#[from] UsbBackendErrors),
     #[error("usb protocol error: {0}")]
     Protocol(#[from] usb::async_protocol::ProtocolError),
 }
 
 impl RomsPage {
-    pub fn set_switch_id(&self, id: Option<DeviceID>) {
+    pub fn set_backend(&self, id: Rc<Backend>) {
         let imp = self.imp();
-        imp.switch_id.replace(id);
+        imp.backend.set(id);
     }
 
     pub fn cancel_upload(&self) {
@@ -435,28 +432,6 @@ impl RomsPage {
         });
     }
 
-    async fn acquire_switch(
-        &self,
-    ) -> Result<Vec<(DeviceID, Result<OwnedFd, UsbError>)>, UploadErrors> {
-        let proxy = UsbProxy::new().await?;
-        let dev_wrapped = {
-            let b = self.imp().switch_id.borrow();
-            b.clone()
-        };
-
-        if dev_wrapped.is_none() {
-            return Err(UploadErrors::SwitchNone);
-        }
-
-        let dev_id = dev_wrapped.unwrap();
-        let root = self.native().unwrap();
-        let handle = WindowIdentifier::from_native(&root).await;
-        let device = Device::new(dev_id, true);
-        Ok(proxy
-            .acquire_devices(handle.as_ref(), &[device], Default::default())
-            .await?)
-    }
-
     fn calculate_total_size(&self) {
         let imp = self.imp();
         self.iterate_store(|_, index| {
@@ -471,35 +446,27 @@ impl RomsPage {
     }
 
     async fn upload(&self) -> Result<(), UploadErrors> {
-        let res = self.acquire_switch().await?;
+        let backend_wrapped = self.imp().backend.get();
+        if backend_wrapped.is_none() {
+            println!("none");
+            return Err(UploadErrors::SwitchNone);
+        }
+
+        let mut ctx = backend_wrapped.as_ref().unwrap().device().await?;
         let imp = self.imp();
+        self.calculate_total_size();
+        self.send_roms(&ctx).await?;
+        let (sender, reciever) = async_channel::unbounded();
+        self.recieve_callbacks(reciever);
 
-        if let Some((_, fd_res)) = res.first() {
-            let mut ctx = SwitchProtocol::new()?;
+        let cancellable = gio::Cancellable::new();
+        imp.cancellable.replace(Some(cancellable.clone()));
+        imp.top_button_stack.set_visible_child_name("cancel");
+        let res = ctx.poll_commands(Some(cancellable), sender).await;
+        self.reset_state();
 
-            match fd_res {
-                Ok(fd) => {
-                    ctx.open_switch_from_fd(fd.as_raw_fd()).await?;
-                }
-                Err(e) => {
-                    return Err(UploadErrors::UsbErrorProxy(e.to_string()));
-                }
-            }
-
-            self.calculate_total_size();
-            self.send_roms(&ctx).await?;
-            let (sender, reciever) = async_channel::unbounded();
-            self.recieve_callbacks(reciever);
-
-            let cancellable = gio::Cancellable::new();
-            imp.cancellable.replace(Some(cancellable.clone()));
-            imp.top_button_stack.set_visible_child_name("cancel");
-            let res = ctx.poll_commands(Some(cancellable), sender).await;
-            self.reset_state();
-
-            if let Err(e) = res {
-                return Err(UploadErrors::Protocol(e));
-            };
+        if let Err(e) = res {
+            return Err(UploadErrors::Protocol(e));
         };
 
         Ok(())
