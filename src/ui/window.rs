@@ -10,8 +10,6 @@ use crate::{
 };
 
 mod imp {
-    use std::cell::OnceCell;
-
     use gtk4::glib::VariantTy;
     use libadwaita::prelude::AdwDialogExt;
 
@@ -27,8 +25,6 @@ mod imp {
         pub navigation: TemplateChild<libadwaita::NavigationView>,
         #[template_child]
         pub roms_page: TemplateChild<RomsPage>,
-
-        pub backend: OnceCell<Rc<Backend>>,
         pub switch_id: RefCell<String>,
     }
 
@@ -101,7 +97,9 @@ impl LiftWindow {
                 DeviceAction::Add => {
                     imp.navigation.push_by_tag("roms-page");
                 }
-                DeviceAction::Remove => {}
+                DeviceAction::Remove => {
+                    imp.navigation.pop_to_tag("switch-not-found");
+                }
             }
         }
     }
@@ -117,7 +115,6 @@ impl LiftWindow {
                     backend.set_native(native);
 
                     let backend = Rc::new(backend);
-                    let _ = obj.imp().backend.set(backend.clone());
 
                     // start backend loop
                     {
