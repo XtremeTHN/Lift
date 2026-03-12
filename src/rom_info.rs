@@ -54,17 +54,17 @@ pub enum FindInfoFilesError {
 #[derive(Error, Debug)]
 pub enum HandleError {
     #[error("Error while parsing xci: {0}")]
-    XciError(#[from] XciErrors),
+    Xci(#[from] XciErrors),
     #[error("Error while trying to get PFS: {0}")]
-    PFSError(#[from] PartitionFsErrors),
+    Pfs(#[from] PartitionFsErrors),
     #[error("Error while trying to read stream: {0}")]
-    ReadError(#[from] binrw::Error),
+    Read(#[from] binrw::Error),
     #[error("Error while parsing keyring: {0}")]
-    KeyringParseError(#[from] KeyringErrors),
+    KeyringParse(#[from] KeyringErrors),
     #[error("Error while trying to find info files: {0}")]
-    FindError(#[from] FindInfoFilesError),
+    Find(#[from] FindInfoFilesError),
     #[error("Error while decoding nacp fields: {0}")]
-    DecodingError(#[from] FromUtf8Error),
+    Decoding(#[from] FromUtf8Error),
 }
 
 pub struct RomInfo {

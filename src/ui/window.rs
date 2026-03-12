@@ -1,12 +1,6 @@
 use async_channel::Receiver;
-use futures_util::StreamExt;
 use glib::{Object, subclass::InitializingObject};
-use gtk4::{
-    CompositeTemplate, TemplateChild, gio,
-    glib::{self, property::PropertySet},
-    prelude::*,
-    subclass::prelude::*,
-};
+use gtk4::{CompositeTemplate, TemplateChild, gio, glib, prelude::*, subclass::prelude::*};
 use libadwaita::{Application, ApplicationWindow, subclass::prelude::*};
 use std::{cell::RefCell, rc::Rc};
 
@@ -14,13 +8,6 @@ use crate::{
     usb::manager::{Backend, DeviceAction, UsbBackend},
     utils::{self},
 };
-
-// use std::{
-//     borrow::Borrow,
-//     cell::RefCell,
-//     default::Default,
-//     os::fd::AsRawFd,
-// };
 
 mod imp {
     use std::cell::OnceCell;

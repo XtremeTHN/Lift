@@ -1,5 +1,5 @@
-use crate::roms::fs::fs::{EncryptionType, FsEntry, FsHeader, FsType, HashData};
 use crate::roms::fs::romfs::RomFsErrors;
+use crate::roms::fs::types::{EncryptionType, FsEntry, FsHeader, FsType, HashData};
 use crate::roms::readers::{EncryptedCtrFileRegion, FileRegion};
 use crate::roms::{crypto::get_tweak, keyring::Keyring};
 use aes::cipher::BlockDecryptMut;
@@ -8,7 +8,7 @@ use aes::{Aes128, cipher::KeyInit};
 use binrw::BinRead;
 use ecb::Decryptor;
 use positioned_io::ReadAt;
-use std::io::{Cursor};
+use std::io::Cursor;
 use std::string::FromUtf8Error;
 use xts_mode::Xts128;
 
@@ -177,9 +177,7 @@ impl Nca {
             KeyAreaEncryptionKeyIndex::Application => {
                 self.keyring.key_area_application[_gen as usize].clone()
             }
-            KeyAreaEncryptionKeyIndex::Ocean => {
-                self.keyring.key_area_ocean[_gen as usize].clone()
-            }
+            KeyAreaEncryptionKeyIndex::Ocean => self.keyring.key_area_ocean[_gen as usize].clone(),
             KeyAreaEncryptionKeyIndex::System => {
                 self.keyring.key_area_system[_gen as usize].clone()
             }
@@ -254,11 +252,7 @@ impl Nca {
             }
         };
 
-        let r = FileRegion::new(
-            stream,
-            fs_offset,
-            entry.end_offset as u64 - fs_offset,
-        );
+        let r = FileRegion::new(stream, fs_offset, entry.end_offset as u64 - fs_offset);
         let e = EncryptedCtrFileRegion::new(r, self.key_area.aes_ctr_key.clone(), header.ctr);
         Ok(e)
     }

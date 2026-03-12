@@ -9,7 +9,7 @@ use gtk4::{
         self, ListStore,
         prelude::{FileExt, ListModelExt},
     },
-    glib::{self, Object, object::Cast, property::PropertyGet},
+    glib::{self, Object, object::Cast},
     prelude::{FrameExt, WidgetExt},
     subclass::prelude::*,
 };
