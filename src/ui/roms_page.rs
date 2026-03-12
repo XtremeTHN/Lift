@@ -237,6 +237,7 @@ impl RomsPage {
             glib::closure_local!(move |_: ListModel, _: u32, removed: u32, _: u32| {
                 if removed > 0 && s.n_items() == 0 {
                     obj.imp().stack.set_visible_child_name("placeholder");
+                    obj.imp().top_button_stack.set_sensitive(false);
                     obj.action_set_enabled("clear-all", false);
                 }
             }),
@@ -247,6 +248,7 @@ impl RomsPage {
         let imp = self.imp();
         imp.store.get().unwrap().append(&f);
         imp.stack.set_visible_child_name("roms");
+        imp.top_button_stack.set_sensitive(true);
         self.action_set_enabled("clear-all", true);
     }
 
