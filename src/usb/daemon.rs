@@ -6,15 +6,10 @@ use std::time::Duration;
 pub enum UsbCommand {
     Write(Vec<u8>, Sender<Result<usize>>, u64),
     Read(usize, Sender<Result<Vec<u8>>>, u64),
-    Exit(Sender<Result<()>>),
+    Exit,
 }
 
-pub fn spawn_daemon(
-    handle: DeviceHandle<Context>,
-    in_ep: u8,
-    out_ep: u8,
-    iface: u8,
-) -> Sender<UsbCommand> {
+pub fn spawn_daemon(handle: DeviceHandle<Context>, in_ep: u8, out_ep: u8) -> Sender<UsbCommand> {
     let (sender, reciever) = unbounded();
     gio::spawn_blocking(move || {
         log::info!("spawned daemon");
@@ -33,13 +28,7 @@ pub fn spawn_daemon(
                         .map(|_| buf);
                     send.send_blocking(res).expect("failed to send read result");
                 }
-                UsbCommand::Exit(sender) => {
-                    sender
-                        .send_blocking(handle.reset())
-                        .expect("failed to send reset result");
-                    sender
-                        .send_blocking(handle.release_interface(iface))
-                        .expect("failed to send release result");
+                UsbCommand::Exit => {
                     break;
                 }
             }

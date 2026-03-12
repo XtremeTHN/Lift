@@ -149,9 +149,7 @@ impl SwitchProtocol {
     }
     async fn send_exit(&mut self) -> ProtocolResult<()> {
         if let Some(old) = &self.daemon_sender {
-            let (sender, reciever) = async_channel::bounded(1);
-            old.send(UsbCommand::Exit(sender)).await?;
-            reciever.recv().await??;
+            old.send(UsbCommand::Exit).await?;
         }
 
         self.daemon_sender = None;
@@ -207,7 +205,6 @@ impl SwitchProtocol {
             }
         }
 
-        let _ = sender.send(UsbOperation::Exit).await;
         self.send_exit().await?;
 
         Ok(())
@@ -220,7 +217,7 @@ impl SwitchProtocol {
         let (in_endpoint, out_endpoint, interface) =
             self.find_endpoints(dev.active_config_descriptor()?)?;
         handle.claim_interface(interface)?;
-        let sender = spawn_daemon(handle, in_endpoint, out_endpoint, interface);
+        let sender = spawn_daemon(handle, in_endpoint, out_endpoint);
         self.daemon_sender = Some(sender);
 
         Ok(())
@@ -383,19 +380,5 @@ impl SwitchProtocol {
         }
 
         Ok(())
-    }
-}
-
-impl Drop for SwitchProtocol {
-    fn drop(&mut self) {
-        if let Some(e) = &self.daemon_sender {
-            let (sender, reciever) = async_channel::bounded(1);
-            if let Err(e) = e.send_blocking(UsbCommand::Exit(sender)) {
-                log::error!("usb daemon couldn't exit: {:?}", e);
-                return;
-            }
-
-            let _ = reciever.recv_blocking().expect("failed to exit the daemon");
-        }
     }
 }

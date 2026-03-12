@@ -48,8 +48,6 @@ impl UsbBackend for PortalBackend {
             let events = event.events();
 
             for x in events {
-                log::info!("Action: {:?}", x.action());
-
                 match x.action() {
                     UsbEventAction::Add => {
                         if x.device().vendor() != Some("Nintendo Co., Ltd".to_string()) {

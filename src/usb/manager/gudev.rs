@@ -1,5 +1,5 @@
 use crate::usb::{
-    async_protocol::SwitchProtocol,
+    async_protocol::{ProtocolError, SwitchProtocol},
     manager::UsbBackendErrors,
 };
 
