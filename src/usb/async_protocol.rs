@@ -1,3 +1,4 @@
+#[cfg(feature = "portal")]
 use ashpd::zvariant::OwnedFd;
 use binrw::BinRead;
 use gtk4::gio::prelude::{CancellableExt, FileExt, InputStreamExt, SeekableExt};
@@ -87,6 +88,7 @@ const FILE_HEADER_SIZE: usize = 0x20;
 pub struct SwitchProtocol {
     pub ctx: Context,
     daemon_sender: Option<Sender<UsbCommand>>,
+    #[cfg(feature = "portal")]
     fd: Option<OwnedFd>,
 }
 
@@ -97,14 +99,27 @@ impl SwitchProtocol {
         Ok(Self {
             ctx,
             daemon_sender: None,
+            #[cfg(feature = "portal")]
             fd: None,
         })
     }
 
-    pub async fn open_switch_from_fd(&mut self, fd: OwnedFd) -> ProtocolResult<()> {
-        let handle = unsafe { self.ctx.open_device_with_fd(fd.as_raw_fd()) }?;
-        self.fd = Some(fd);
+    async fn open_fd(&mut self, fd: i32) -> ProtocolResult<DeviceHandle<Context>> {
+        Ok(unsafe { self.ctx.open_device_with_fd(fd) }?)
+    }
 
+    #[cfg(feature = "portal")]
+    pub async fn open_switch_from_fd(&mut self, fd: OwnedFd) -> ProtocolResult<()> {
+        let handle = self.open_fd(fd.as_raw_fd()).await?;
+        self.fd = Some(fd);
+        self.spawn_usb(handle).await?;
+
+        Ok(())
+    }
+
+    #[cfg(feature = "gudev")]
+    pub async fn open_switch_from_fd(&mut self, fd: i32) -> ProtocolResult<()> {
+        let handle = self.open_fd(fd).await?;
         self.spawn_usb(handle).await?;
 
         Ok(())
@@ -162,7 +177,7 @@ impl SwitchProtocol {
                 break;
             }
 
-            sender.send(UsbOperation::Wait).await;
+            let _ = sender.send(UsbOperation::Wait).await;
             let header = self.read_with_timeout(0x20, 0).await?;
 
             let magic = String::from_utf8(header[0..4].to_vec())?;
@@ -191,7 +206,7 @@ impl SwitchProtocol {
             }
         }
 
-        sender.send(UsbOperation::Exit).await;
+        let _ = sender.send(UsbOperation::Exit).await;
         self.send_exit().await?;
 
         Ok(())
