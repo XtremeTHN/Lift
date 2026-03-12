@@ -102,16 +102,21 @@ impl UsbBackend for PortalBackend {
             }
         };
 
-        println!("{:?}", devices);
         let dev_tuple = match devices.into_iter().next() {
             Some(d) => d,
-            None => return Err(UsbBackendErrors::Error("Devices are null".to_string())),
+            None => {
+                return Err(UsbBackendErrors::Error(
+                    "The request was dismissed".to_string(),
+                ));
+            }
         };
 
         let fd = match dev_tuple.1 {
             Ok(fd) => fd,
             Err(e) => {
-                return Err(UsbBackendErrors::Error(e.to_string()));
+                return Err(UsbBackendErrors::Error(
+                    "Couldn't acquire device.".to_string(),
+                ));
             }
         };
 
