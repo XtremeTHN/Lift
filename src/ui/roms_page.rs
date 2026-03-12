@@ -7,12 +7,12 @@ use gtk4::{
     },
     glib::{
         self,
-        object::{Cast, CastNone, ObjectExt},
+        object::{Cast, ObjectExt},
     },
-    prelude::{WidgetExt, WidgetExtManual},
+    prelude::WidgetExt,
     subclass::prelude::*,
 };
-use std::{os::fd::AsRawFd, rc::Rc};
+use std::rc::Rc;
 
 use glib::subclass::InitializingObject;
 use libadwaita::{NavigationPage, subclass::prelude::*};

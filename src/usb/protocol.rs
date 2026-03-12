@@ -1,7 +1,6 @@
 use log::{info, warn};
 use rusb::Error;
 use rusb::{ConfigDescriptor, Context, Device, DeviceHandle, UsbContext};
-use std::cell::OnceCell;
 use std::fs::File;
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::string::FromUtf8Error;

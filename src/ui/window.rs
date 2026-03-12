@@ -12,7 +12,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     usb::manager::{Backend, DeviceAction, UsbBackend},
-    utils::{self, send_error},
+    utils::{self},
 };
 
 // use std::{

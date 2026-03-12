@@ -6,6 +6,7 @@ use log::{info, warn};
 use rusb::Error;
 use rusb::{ConfigDescriptor, Context, DeviceHandle, UsbContext};
 use std::io::Cursor;
+#[cfg(feature = "portal")]
 use std::os::fd::AsRawFd;
 use std::string::FromUtf8Error;
 
