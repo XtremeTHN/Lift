@@ -179,13 +179,13 @@ glib::wrapper! {
 
 #[derive(thiserror::Error, Debug)]
 enum UploadErrors {
-    #[error("switch device is none")]
+    #[error("Switch device is none")]
     SwitchNone,
-    #[error("usb error: {0}")]
+    #[error("LibUsb error: {0}")]
     Usb(#[from] rusb::Error),
-    #[error("backend error: {0}")]
+    #[error("{0}")]
     Backend(#[from] UsbBackendErrors),
-    #[error("usb protocol error: {0}")]
+    #[error("Usb protocol error: {0}")]
     Protocol(#[from] usb::async_protocol::ProtocolError),
 }
 
