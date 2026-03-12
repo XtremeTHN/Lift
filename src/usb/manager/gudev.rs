@@ -31,7 +31,7 @@ fn find_switch(ctx: &Context) -> Result<DeviceHandle<Context>, UsbBackendErrors>
     }
 
     if switch.is_none() {
-        return Err(ProtocolError::SwitchNotFound.into());
+        return Err(UsbBackendErrors::Error(String::from("Switch not found")));
     }
 
     let dev = switch.unwrap();

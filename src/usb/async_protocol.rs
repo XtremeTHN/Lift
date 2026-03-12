@@ -69,8 +69,6 @@ pub enum ProtocolError {
     File(#[from] glib::Error),
     #[error("Invalid magic: {0}")]
     InvalidMagic(String),
-    #[error("switch not found")]
-    SwitchNotFound,
 }
 
 type ProtocolResult<T> = Result<T, ProtocolError>;
