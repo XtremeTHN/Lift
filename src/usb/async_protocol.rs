@@ -57,7 +57,9 @@ pub enum ProtocolError {
     #[error("Endpoint not found: {0}")]
     EndpointNotFound(String),
     #[error("Command send failed: {0}")]
-    Send(#[from] async_channel::SendError<UsbCommand>),
+    DaemonSend(#[from] async_channel::SendError<UsbCommand>),
+    #[error("Callback send failed: {0}")]
+    CallbackSend(#[from] async_channel::SendError<UsbOperation>),
     #[error("Command recv failed: {0}")]
     Recv(#[from] async_channel::RecvError),
     #[error("libusb error: {0}")]
@@ -373,9 +375,10 @@ impl SwitchProtocol {
 
             self.write(&buffer[..data_start + read_size as usize])
                 .await?;
+
             sender
                 .send(UsbOperation::File(name.clone(), read_size))
-                .await;
+                .await?;
             current_offset += read_size;
         }
 

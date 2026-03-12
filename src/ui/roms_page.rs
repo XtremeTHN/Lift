@@ -179,8 +179,6 @@ glib::wrapper! {
 
 #[derive(thiserror::Error, Debug)]
 enum UploadErrors {
-    #[error("portal usb error: {0}")]
-    UsbErrorProxy(String),
     #[error("switch device is none")]
     SwitchNone,
     #[error("usb error: {0}")]
@@ -194,7 +192,7 @@ enum UploadErrors {
 impl RomsPage {
     pub fn set_backend(&self, id: Rc<Backend>) {
         let imp = self.imp();
-        imp.backend.set(id);
+        let _ = imp.backend.set(id);
     }
 
     pub fn cancel_upload(&self) {
