@@ -47,8 +47,18 @@
             ],
             "sources" : [
                 {
-                    "type" : "git",
-                    "url" : "file:///home/axel/Projects"
+                    "type" : "dir",
+                    "path" : ".",
+                    "skip": [
+                        ".direnv",
+                        ".vscode",
+                        "target",
+                        ".envrc",
+                        "*.xci",
+                        "*.bin",
+                        "flake.nix",
+                        "flake.lock"
+                    ]
                 }
             ]
         }

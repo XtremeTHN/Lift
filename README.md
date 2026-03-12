@@ -3,8 +3,43 @@
 A [nxloader](https://github.com/XtremeTHN/NXLoader) rust port. This port should solve some issues with usb transfers and memory errors.
 
 ## Installation
-Currently only flatpak is supported, cuz this program uses desktop portals to access the switch usb.<br>
-Download the flatpak file in the releases or build it yourself with gnome builder
+~~Currently only flatpak is supported, cuz this program uses desktop portals to access the switch usb.<br>~~
+
+### Flatpak
+Download the flatpak file in the releases or build it yourself with gnome, and then execute this:
+```
+flatpak install --user com.github.XtremeTHN.Lift.flatpak
+```
+Done
+
+### Meson
+#### Dependencies
+- libusb
+- gtk4
+- libadwaita
+- libgudev
+
+```
+meson setup build
+meson install -C build
+```
+
+### NixOs
+Add this repository to your flake inputs
+```nix
+# flake.nix
+inputs.lift = {
+  url = "github:XtremeTHN/Lift;
+  inputs.nixpkgs.follows = "nixpkgs";
+};
+```
+Then add lift to the `home.packages` or `environment.systemPackages`.
+```nix
+# home.nix
+home.packages = [
+  inputs.lift.packages."x86_64-linux".default
+];
+```
 
 ## TODO
 - [ ] Add support for wireless protocol
