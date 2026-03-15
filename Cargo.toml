@@ -10,6 +10,7 @@ gudev = ["dep:gudev"]
 
 [dependencies]
 ashpd = { version = "0.13.3", optional = true, default-features = false, features = ["gtk4", "usb", "async-io"] }
+nxroms = { git = "https://github.com/XtremeTHN/RustNXRoms" }
 async-channel = "2.5.0"
 binrw = "0.15.1"
 env_logger = "0.11.9"

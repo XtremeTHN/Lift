@@ -1,19 +1,22 @@
 use std::path::PathBuf;
 
-use gtk4::{self, prelude::{ApplicationExt, GtkWindowExt}, gio::{self, prelude::{ApplicationExtManual}}};
+use gtk4::{
+    self,
+    gio::{self, prelude::ApplicationExtManual},
+    prelude::{ApplicationExt, GtkWindowExt},
+};
 use libadwaita::Application;
 
-mod rom_info;
 mod config;
-mod utils;
-mod roms;
-mod usb;
+mod rom_info;
 mod ui;
+mod usb;
+mod utils;
 
 fn main() {
     let env = env_logger::Env::default().filter_or("LIFT_LOG", "info");
     env_logger::init_from_env(env);
-    
+
     let mut buf = PathBuf::from(config::PKGDATADIR);
     buf.push("lift.gresource");
 

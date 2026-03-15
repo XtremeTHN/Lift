@@ -1268,6 +1268,7 @@ dependencies = [
  "hex",
  "libadwaita",
  "log",
+ "nxroms",
  "positioned-io",
  "rusb",
  "shellexpand",
@@ -1321,6 +1322,26 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "nxroms"
+version = "0.1.0"
+source = "git+https://github.com/XtremeTHN/RustNXRoms#5e41bca3476f9b398bbca208f4fa7b56ff052979"
+dependencies = [
+ "aes",
+ "async-channel",
+ "binrw",
+ "ctr",
+ "dirs",
+ "ecb",
+ "env_logger",
+ "hex",
+ "log",
+ "positioned-io",
+ "shellexpand",
+ "thiserror",
+ "xts-mode",
 ]
 
 [[package]]

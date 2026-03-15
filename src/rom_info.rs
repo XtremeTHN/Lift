@@ -6,10 +6,13 @@ use std::{
 };
 
 use binrw::BinRead;
-use gtk4::glib;
+use gtk4::{
+    gio::{Settings, prelude::SettingsExt},
+    glib,
+};
 use positioned_io::ReadAt;
 
-use crate::roms::{
+use nxroms::{
     formats::{
         nacp::{Nacp, TitleLanguage},
         nca::{ContentType, Nca, NcaErrors},
@@ -39,6 +42,8 @@ pub enum FindInfoFilesError {
     GLibError(#[from] glib::Error),
     #[error("Couldn't decode name: {0}")]
     DecodingError(#[from] FromUtf8Error),
+    #[error("Error while parsing keyring: {0}")]
+    KeyringParse(#[from] KeyringErrors),
     #[error("File in romfs has no extension: {0}")]
     NoExtension(String),
     #[error("Couldn't parse nca: {0}")]
@@ -102,13 +107,21 @@ impl RomInfo {
         Ok(())
     }
 
+    fn get_keyring(&self) -> Result<Keyring, KeyringErrors> {
+        let settings = Settings::new("com.github.XtremeTHN.Lift");
+        let path = settings.string("keys-path");
+        let mut keys = Keyring::new(path.to_string());
+        keys.parse()?;
+
+        Ok(keys)
+    }
+
     fn find_info_files<T: BinRead + PFSHeader, R: ReadAt + Read + Seek>(
         &self,
         pfs: PartitionFs<T>,
         part: R,
     ) -> Result<(Nacp, Option<Vec<u8>>), FindInfoFilesError> {
-        let mut keyring = Keyring::from_settings("com.github.XtremeTHN.Lift", "keys-path");
-        keyring.parse().expect("error while parsing keyring");
+        let keyring = self.get_keyring()?;
         for (index, entry) in pfs.header.entry_table().iter().enumerate() {
             let name = pfs.get_name_for_entry(entry).expect("failed to get name:");
 
@@ -139,7 +152,7 @@ impl RomInfo {
                     let ext_unwrapped = ext.unwrap();
                     if ext_unwrapped == "dat" && texture.is_none() {
                         let mut buf = vec![0u8; x.size as usize];
-                        let mut reg = rom_fs.get_file(x, &mut fs);
+                        let mut reg = rom_fs.open_file(x, &mut fs);
 
                         reg.read_exact(&mut buf)?;
 
@@ -147,7 +160,7 @@ impl RomInfo {
                     }
 
                     if ext_unwrapped == "nacp" && nacp.is_none() {
-                        let mut reg = rom_fs.get_file(x, &mut fs);
+                        let mut reg = rom_fs.open_file(x, &mut fs);
                         nacp = Some(Nacp::read(&mut reg).expect("asd"));
                     }
                 }
@@ -177,7 +190,7 @@ impl RomInfo {
     }
 
     fn handle_nsp(&mut self) -> Result<(), HandleError> {
-        let pfs = PartitionFs::new_default_header(&mut self.file)?;
+        let pfs = PartitionFs::new_pfs0_header(&mut self.file)?;
         let (nacp, texture) = self.find_info_files(pfs, &self.file)?;
 
         self.image_data = texture;

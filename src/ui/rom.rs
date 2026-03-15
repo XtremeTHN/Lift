@@ -17,14 +17,12 @@ use gtk4::{
 use glib::subclass::InitializingObject;
 
 use super::circular_progress_paintable::{CircularProgressPaintable, Color};
-use crate::{
-    rom_info::RomInfo,
-    roms::formats::nacp::{TitleLanguage, TitleLanguageErrors},
-    utils::send_error,
-};
+use nxroms::formats::nacp::{TitleLanguage, TitleLanguageErrors};
+
+use crate::{rom_info::RomInfo, utils::send_error};
 
 mod imp {
-    use crate::roms::formats::nacp::TitleLanguage;
+    use nxroms::formats::nacp::TitleLanguage;
 
     use super::*;
 
