@@ -96,9 +96,11 @@ impl LiftWindow {
             match e {
                 DeviceAction::Add => {
                     imp.navigation.push_by_tag("roms-page");
+                    self.add_toast("Switch connected");
                 }
                 DeviceAction::Remove => {
                     imp.navigation.pop_to_tag("switch-not-found");
+                    self.add_toast("Switch disconnected");
                 }
             }
         }
