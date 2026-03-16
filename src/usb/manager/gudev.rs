@@ -53,9 +53,15 @@ impl GUdevBackend {
 
 impl UsbBackend for GUdevBackend {
     type Error = UsbBackendErrors;
-
     async fn start(&self) -> Result<(), Self::Error> {
         let sender = self.sender.clone();
+
+        if find_switch(&self.ctx).is_ok() {
+            sender
+                .send_blocking(DeviceAction::Add)
+                .expect("failed to send add");
+        }
+
         self.client.connect_uevent(move |_, action, dev| {
             if let Some(vendor) = dev.property("ID_VENDOR_FROM_DATABASE")
                 && vendor != "Nintendo Co., Ltd"
