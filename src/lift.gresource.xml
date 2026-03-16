@@ -16,5 +16,7 @@
     <file alias="drive-harddisk-usb-symbolic.svg" preprocess="xml-stripblanks">icons/drive-harddisk-usb-symbolic.svg</file>
     <file alias="image-missing-symbolic.svg" preprocess="xml-stripblanks">icons/image-missing-symbolic.svg</file>
     <file alias="settings-symbolic.svg" preprocess="xml-stripblanks">icons/settings-symbolic.svg</file>
+    <file alias="software-update-available-symbolic.svg" preprocess="xml-stripblanks">icons/software-update-available-symbolic.svg</file>
+    <file alias="application-x-addon-symbolic.svg" preprocess="xml-stripblanks">icons/application-x-addon-symbolic.svg</file>
   </gresource>
 </gresources>

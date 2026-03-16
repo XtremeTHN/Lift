@@ -1,4 +1,4 @@
 pub static VERSION: &str = "0.1.0";
 pub static GETTEXT_PACKAGE: &str = "lift";
-pub static LOCALEDIR: &str = "/usr/local/share/locale";
-pub static PKGDATADIR: &str = "/usr/local/share/lift";
+pub static LOCALEDIR: &str = "/app/share/locale";
+pub static PKGDATADIR: &str = "/app/share/lift";
