@@ -16,11 +16,12 @@ use nxroms::{
     formats::{
         nacp::{Nacp, TitleLanguage},
         nca::{ContentType, Nca, NcaErrors},
+        cnmt::{PackagedContentMetaHeader, ContentMetaType},
         xci::{Xci, XciErrors},
     },
     fs::{
         pfs::{PFSHeader, PartitionFs, PartitionFsErrors},
-        romfs::RomFs,
+        romfs::{RomFs, RomFsErrors},
     },
     keyring::{Keyring, KeyringErrors},
 };
@@ -50,6 +51,8 @@ pub enum FindInfoFilesError {
     NcaError(#[from] NcaErrors),
     #[error("Couldn't construct Nacp: {0}")]
     NacpError(#[from] binrw::Error),
+    #[error("Couldn't read romfs: {0}")]
+    RomFS(#[from] RomFsErrors),
     #[error("Error while reading entry: {0}")]
     IOError(#[from] std::io::Error),
     #[error("Couldn't find nacp file")]
@@ -77,6 +80,7 @@ pub struct RomInfo {
     pub version: Option<String>,
     pub image_data: Option<Vec<u8>>,
     pub language: TitleLanguage,
+    pub meta_type: Option<ContentMetaType>,
     file: File,
     path: PathBuf,
 }
@@ -90,6 +94,7 @@ impl RomInfo {
             version: None,
             image_data: None,
             language,
+            meta_type: None,
             file,
             path,
         })
@@ -120,8 +125,12 @@ impl RomInfo {
         &self,
         pfs: PartitionFs<T>,
         part: R,
-    ) -> Result<(Nacp, Option<Vec<u8>>), FindInfoFilesError> {
+    ) -> Result<(Nacp, Option<Vec<u8>>, PackagedContentMetaHeader), FindInfoFilesError> {
         let keyring = self.get_keyring()?;
+
+        let mut meta_header: Option<PackagedContentMetaHeader> = None;
+        let mut nacp: Option<Nacp> = None;
+        let mut texture: Option<Vec<u8>> = None;
         for (index, entry) in pfs.header.entry_table().iter().enumerate() {
             let name = pfs.get_name_for_entry(entry).expect("failed to get name:");
 
@@ -132,48 +141,53 @@ impl RomInfo {
             }
 
             let mut nca = Nca::new(&keyring, &mut r).expect("err");
+            
+            match nca.header.content_type {
+                ContentType::Control => {
+                    let mut fs = nca.open_fs(0, &mut r)?;
+                    let rom_fs = RomFs::new(&mut fs)?;
+                    for x in rom_fs.files.iter() {
+                        let name = String::from_utf8(x.name.clone())?;
+                        let unwrapped = PathBuf::from(&name);
+                        let ext = unwrapped.extension();
+                        if ext.is_none() {
+                            return Err(FindInfoFilesError::NoExtension(name));
+                        }
 
-            if let ContentType::Control = nca.header.content_type {
-                log::info!("found control nca at index {}: {}", index, name);
-                let mut fs = nca.open_fs(0, &mut r)?;
-                let rom_fs = RomFs::new(&mut fs).expect("err");
+                        let ext_unwrapped = ext.unwrap();
+                        if ext_unwrapped == "dat" && texture.is_none() {
+                            let mut buf = vec![0u8; x.size as usize];
+                            let mut reg = rom_fs.open_file(x, &mut fs);
 
-                let mut nacp: Option<Nacp> = None;
-                let mut texture: Option<Vec<u8>> = None;
+                            reg.read_exact(&mut buf)?;
 
-                for x in rom_fs.files.iter() {
-                    let name = String::from_utf8(x.name.clone())?;
-                    let unwrapped = PathBuf::from(&name);
-                    let ext = unwrapped.extension();
-                    if ext.is_none() {
-                        return Err(FindInfoFilesError::NoExtension(name));
-                    }
+                            texture = Some(buf);
+                        }
 
-                    let ext_unwrapped = ext.unwrap();
-                    if ext_unwrapped == "dat" && texture.is_none() {
-                        let mut buf = vec![0u8; x.size as usize];
-                        let mut reg = rom_fs.open_file(x, &mut fs);
-
-                        reg.read_exact(&mut buf)?;
-
-                        texture = Some(buf);
-                    }
-
-                    if ext_unwrapped == "nacp" && nacp.is_none() {
-                        let mut reg = rom_fs.open_file(x, &mut fs);
-                        nacp = Some(Nacp::read(&mut reg).expect("asd"));
-                    }
+                        if ext_unwrapped == "nacp" && nacp.is_none() {
+                            let mut reg = rom_fs.open_file(x, &mut fs);
+                            nacp = Some(Nacp::read(&mut reg).expect("asd"));
+                        }
+                    } 
                 }
-
-                if nacp.is_none() {
-                    return Err(FindInfoFilesError::NacpNotFound);
+                ContentType::Meta => {
+                    let mut fs = nca.open_fs(0, &mut r)?;
+                    let header = PackagedContentMetaHeader::read(&mut fs)?;
+                    meta_header = Some(header);
                 }
-
-                return Ok((nacp.unwrap(), texture));
+                _ => {}
+            }
+            
+            if nacp.is_some() && meta_header.is_some() {
+                break;
             }
         }
 
-        Err(FindInfoFilesError::NacpNotFound)
+        if nacp.is_none() {
+            return Err(FindInfoFilesError::NacpNotFound);
+        }
+
+        Ok((nacp.unwrap(), texture, meta_header.unwrap()))
     }
 
     fn handle_xci(&mut self) -> Result<(), HandleError> {
@@ -181,21 +195,22 @@ impl RomInfo {
 
         let mut part = xci.open_partition("secure".to_string(), &self.file)?;
         let pfs = xci.open_partition_fs(&mut part)?;
-        let (nacp, texture) = self.find_info_files(pfs, &mut part)?;
+        let (nacp, texture, meta_header) = self.find_info_files(pfs, &mut part)?;
 
         self.image_data = texture;
         self.handle_nacp(nacp)?;
-
+        self.meta_type = Some(meta_header.content_meta_type);
+        
         Ok(())
     }
 
     fn handle_nsp(&mut self) -> Result<(), HandleError> {
         let pfs = PartitionFs::new_pfs0_header(&mut self.file)?;
-        let (nacp, texture) = self.find_info_files(pfs, &self.file)?;
+        let (nacp, texture, meta_header) = self.find_info_files(pfs, &self.file)?;
 
         self.image_data = texture;
         self.handle_nacp(nacp)?;
-
+        self.meta_type = Some(meta_header.content_meta_type);
         Ok(())
     }
 

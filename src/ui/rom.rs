@@ -17,7 +17,10 @@ use gtk4::{
 use glib::subclass::InitializingObject;
 
 use super::circular_progress_paintable::{CircularProgressPaintable, Color};
-use nxroms::formats::nacp::{TitleLanguage, TitleLanguageErrors};
+use nxroms::formats::{
+    nacp::{TitleLanguage, TitleLanguageErrors},
+    cnmt::ContentMetaType
+};
 
 use crate::{rom_info::RomInfo, utils::send_error};
 
@@ -34,6 +37,9 @@ mod imp {
 
         #[template_child]
         pub icon: TemplateChild<gtk4::Picture>,
+
+        #[template_child]
+        pub rom_type_icon: TemplateChild<gtk4::Image>,
 
         #[template_child]
         pub rom_title: TemplateChild<gtk4::Label>,
@@ -251,6 +257,18 @@ impl Rom {
                             send_error(self, &format!("Couldn't construct texture: {}", e));
                         }
                     }
+                }
+
+                match rom_info.meta_type {
+                    Some(ContentMetaType::Patch) => {
+                        obj.rom_type_icon.set_icon_name(Some("software-update-available"));
+                        obj.rom_type_icon.set_visible(true);
+                    }
+                    Some(ContentMetaType::AddOnContent) => {
+                        obj.rom_type_icon.set_icon_name(Some("application-x-addon-symbolic"));
+                        obj.rom_type_icon.set_visible(true);
+                    },
+                    _ => {}
                 }
 
                 // TODO: handle image fallback
