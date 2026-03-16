@@ -17,14 +17,15 @@ use gtk4::{
 use glib::subclass::InitializingObject;
 
 use super::circular_progress_paintable::{CircularProgressPaintable, Color};
-use crate::{
-    rom_info::RomInfo,
-    roms::formats::nacp::{TitleLanguage, TitleLanguageErrors},
-    utils::send_error,
+use nxroms::formats::{
+    cnmt::ContentMetaType,
+    nacp::{TitleLanguage, TitleLanguageErrors},
 };
 
+use crate::{rom_info::RomInfo, utils::send_error};
+
 mod imp {
-    use crate::roms::formats::nacp::TitleLanguage;
+    use nxroms::formats::nacp::TitleLanguage;
 
     use super::*;
 
@@ -36,6 +37,9 @@ mod imp {
 
         #[template_child]
         pub icon: TemplateChild<gtk4::Picture>,
+
+        #[template_child]
+        pub rom_type_icon: TemplateChild<gtk4::Image>,
 
         #[template_child]
         pub rom_title: TemplateChild<gtk4::Label>,
@@ -232,26 +236,53 @@ impl Rom {
 
                 let rom_info = info.unwrap();
 
-                self.set_or(&obj.rom_title, "", &rom_info.title, "Unknown");
-                self.set_or(&obj.rom_version, "Version: ", &rom_info.version, "0.0.0");
-                self.set_or(
-                    &obj.rom_size,
-                    "Size: ",
-                    &self.format_size(Some(self.imp().size.get())),
-                    "0b",
-                );
+                if rom_info.found_nacp {
+                    self.set_or(&obj.rom_title, "", &rom_info.title, "Unknown");
+                    self.set_or(&obj.rom_version, "Version: ", &rom_info.version, "0.0.0");
+                    self.set_or(
+                        &obj.rom_size,
+                        "Size: ",
+                        &self.format_size(Some(self.imp().size.get())),
+                        "0b",
+                    );
 
-                if let Some(image_data) = rom_info.image_data {
-                    let bytes = glib::Bytes::from(&image_data);
-                    let texture = gdk::Texture::from_bytes(&bytes);
+                    if let Some(image_data) = rom_info.image_data {
+                        let bytes = glib::Bytes::from(&image_data);
+                        let texture = gdk::Texture::from_bytes(&bytes);
 
-                    match texture {
-                        Ok(t) => {
-                            obj.icon.set_paintable(Some(&t));
+                        match texture {
+                            Ok(t) => {
+                                obj.icon.set_paintable(Some(&t));
+                            }
+                            Err(e) => {
+                                send_error(self, &format!("Couldn't construct texture: {}", e));
+                            }
                         }
-                        Err(e) => {
-                            send_error(self, &format!("Couldn't construct texture: {}", e));
-                        }
+                    }
+                } else {
+                    self.set_default_data(path.clone()).await;
+                    send_error(
+                        self,
+                        &format!(
+                            "Nacp not found in file: {}",
+                            path.file_name().unwrap().to_string_lossy()
+                        ),
+                    );
+                }
+
+                match rom_info.meta_type {
+                    Some(ContentMetaType::Patch) => {
+                        obj.rom_type_icon
+                            .set_icon_name(Some("software-update-available"));
+                        obj.rom_type_icon.set_visible(true);
+                    }
+                    Some(ContentMetaType::AddOnContent) => {
+                        obj.rom_type_icon
+                            .set_icon_name(Some("application-x-addon-symbolic"));
+                        obj.rom_type_icon.set_visible(true);
+                    }
+                    _ => {
+                        println!("{:?}", rom_info.meta_type);
                     }
                 }
 
