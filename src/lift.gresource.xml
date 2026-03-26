@@ -5,4 +5,16 @@
     <file preprocess="xml-stripblanks">home_page.ui</file>
     <file preprocess="xml-stripblanks">roms_page.ui</file>
   </gresource>
+
+  <gresource prefix="/com/github/XtremeTHN/Lift/icons/scalable/actions">
+    <file alias="nintendo-controller-symbolic.svg" preprocess="xml-stripblanks">icons/nintendo-controller-symbolic.svg</file>
+    <file alias="switch-symbolic.svg" preprocess="xml-stripblanks">icons/switch-symbolic.svg</file>
+    <file alias="plus-large-symbolic.svg" preprocess="xml-stripblanks">icons/plus-large-symbolic.svg</file>
+    <file alias="drive-harddisk-usb-symbolic.svg" preprocess="xml-stripblanks">icons/drive-harddisk-usb-symbolic.svg</file>
+    <file alias="image-missing-symbolic.svg" preprocess="xml-stripblanks">icons/image-missing-symbolic.svg</file>
+    <file alias="settings-symbolic.svg" preprocess="xml-stripblanks">icons/settings-symbolic.svg</file>
+    <file alias="software-update-available-symbolic.svg" preprocess="xml-stripblanks">icons/software-update-available-symbolic.svg</file>
+    <file alias="application-x-addon-symbolic.svg" preprocess="xml-stripblanks">icons/application-x-addon-symbolic.svg</file>
+    <file alias="network-wireless-symbolic.svg" preprocess="xml-stripblanks">icons/network-wireless-symbolic.svg</file>
+  </gresource>
 </gresources>
