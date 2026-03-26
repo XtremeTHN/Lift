@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/com/github/XtremeTHN/Lift">
+    <file preprocess="xml-stripblanks">window.ui</file>
+    <file preprocess="xml-stripblanks">home_page.ui</file>
+    <file preprocess="xml-stripblanks">roms_page.ui</file>
+  </gresource>
+</gresources>

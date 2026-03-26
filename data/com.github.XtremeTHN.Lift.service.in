@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=com.github.XtremeTHN.Lift
+Exec=@bindir@/lift --gapplication-service

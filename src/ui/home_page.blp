@@ -1,0 +1,83 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $HomePage: Adw.NavigationPage {
+  title: "Lift";
+  tag: "switch-not-found";
+
+  child: Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {
+      [end]
+      Button {
+        icon-name: "settings-symbolic";
+        action-name: "win.settings";
+      }
+
+      title-widget: Adw.ViewSwitcher {
+        stack: stack;
+        policy: wide;
+      };
+    }
+
+    content: Adw.ViewStack stack {
+      notify::visible-child-name => $on_child_change() swapped;
+      Adw.ViewStackPage {
+        title: _("Usb");
+        name: "usb";
+        icon-name: "drive-harddisk-usb-symbolic";
+
+        child: Adw.StatusPage {
+          icon-name: "drive-harddisk-usb-symbolic";
+          title: "Switch not found";
+          description: "Connect your switch to your pc through usb";
+        };
+      }
+
+      Adw.ViewStackPage {
+        title: _("Wireless");
+        name: "wireless";
+        icon-name: "network-wireless-symbolic";
+
+        child: Adw.StatusPage {
+          icon-name: "network-wireless-symbolic";
+          title: "Wireless";
+          description: _("Enter your Switch's IP address below");
+
+          child: Box {
+            orientation: vertical;
+            spacing: 10;
+
+            ListBox {
+              styles [
+                "boxed-list-separate",
+              ]
+
+              selection-mode: none;
+              halign: center;
+
+              Adw.EntryRow ip_row {
+                title: "Eg: 192.168.0.92";
+                entry-activated => $on_confirm() swapped;
+                changed => $on_changed() swapped;
+              }
+            }
+
+            Button net_confirm_btt {
+              styles [
+                "pill",
+                "suggested-action",
+              ]
+
+              halign: center;
+              sensitive: false;
+              label: "Confirm";
+
+              clicked => $on_confirm() swapped;
+            }
+          };
+        };
+      }
+    };
+  };
+}
