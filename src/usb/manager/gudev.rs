@@ -1,7 +1,4 @@
-use crate::usb::{
-    async_protocol::{ProtocolError, SwitchProtocol},
-    manager::UsbBackendErrors,
-};
+use crate::usb::{async_protocol::SwitchProtocol, manager::UsbBackendErrors};
 
 use super::{DeviceAction, UsbBackend};
 use async_std::channel::Sender;
@@ -52,8 +49,7 @@ impl GUdevBackend {
 }
 
 impl UsbBackend for GUdevBackend {
-    type Error = UsbBackendErrors;
-    async fn start(&self) -> Result<(), Self::Error> {
+    async fn start(&self) -> Result<(), UsbBackendErrors> {
         let sender = self.sender.clone();
 
         if find_switch(&self.ctx).is_ok() {

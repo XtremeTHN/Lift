@@ -4,7 +4,7 @@ compile_error!("Enable either 'portal' or 'gudev', not both.");
 #[cfg(feature = "portal")]
 mod portal;
 #[cfg(feature = "portal")]
-pub use self::portal::PortalBackend as Backend;
+pub use self::portal::{PortalBackend as Backend, PortalBackendErrors};
 
 #[cfg(feature = "gudev")]
 mod gudev;
@@ -15,6 +15,10 @@ use crate::usb::async_protocol::{ProtocolError, SwitchProtocol};
 
 #[derive(thiserror::Error, Debug)]
 pub enum UsbBackendErrors {
+    #[cfg(feature = "portal")]
+    #[error("Error from portal:")]
+    Portal(#[from] PortalBackendErrors),
+
     #[error("Error from protocol: {0}")]
     Protocol(#[from] ProtocolError),
 
@@ -26,9 +30,7 @@ pub enum UsbBackendErrors {
 }
 
 pub trait UsbBackend {
-    type Error;
-
-    async fn start(&self) -> Result<(), Self::Error>;
+    async fn start(&self) -> Result<(), UsbBackendErrors>;
     fn set_native(&self, native: gtk::Native);
     async fn device(&self) -> Result<SwitchProtocol, UsbBackendErrors>;
 }

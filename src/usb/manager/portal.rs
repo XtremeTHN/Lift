@@ -5,7 +5,7 @@ use ashpd::{
     Error, WindowIdentifier,
     desktop::usb::{Device, DeviceID, UsbEventAction, UsbProxy},
 };
-use async_channel::Sender;
+use async_std::channel::Sender;
 use futures_util::StreamExt;
 use std::{
     cell::{OnceCell, RefCell},
@@ -15,13 +15,21 @@ use std::{
 pub struct PortalBackend {
     proxy: UsbProxy,
     switch_id: RefCell<Option<DeviceID>>,
-    native: OnceCell<gtk4::Native>,
+    native: OnceCell<gtk::Native>,
     sender: Sender<DeviceAction>,
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum PortalBackendErrors {
+    #[error("Couldn't get device events: {0}")]
+    Events(#[from] Error),
+}
+
 impl PortalBackend {
-    pub async fn new(sender: Sender<DeviceAction>) -> Result<Self, Error> {
-        let proxy = UsbProxy::new().await?;
+    pub async fn new(sender: Sender<DeviceAction>) -> Result<Self, UsbBackendErrors> {
+        let proxy = UsbProxy::new()
+            .await
+            .map_err(|e| PortalBackendErrors::from(e))?;
 
         Ok(Self {
             proxy,
@@ -32,17 +40,14 @@ impl PortalBackend {
     }
 }
 
-#[derive(thiserror::Error, Debug)]
-pub enum PortalBackendErrors {
-    #[error("Couldn't get device events: {0}")]
-    Events(#[from] Error),
-}
-
 impl UsbBackend for PortalBackend {
-    type Error = PortalBackendErrors;
-    async fn start(&self) -> Result<(), Self::Error> {
+    async fn start(&self) -> Result<(), UsbBackendErrors> {
         let _ = self.proxy.create_session(Default::default()).await;
-        let mut stream = self.proxy.receive_device_events().await?;
+        let mut stream = self
+            .proxy
+            .receive_device_events()
+            .await
+            .map_err(|e| PortalBackendErrors::from(e))?;
 
         while let Some(event) = stream.next().await {
             let events = event.events();
@@ -79,7 +84,7 @@ impl UsbBackend for PortalBackend {
         Ok(())
     }
 
-    fn set_native(&self, native: gtk4::Native) {
+    fn set_native(&self, native: gtk::Native) {
         let _ = self.native.set(native);
     }
 

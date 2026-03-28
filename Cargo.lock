@@ -1232,6 +1232,7 @@ dependencies = [
  "async-std",
  "binrw",
  "env_logger",
+ "futures-util",
  "gettext-rs",
  "gtk4",
  "gudev",
