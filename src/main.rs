@@ -1,5 +1,7 @@
 mod application;
 mod config;
+mod finder;
+mod utils;
 mod usb;
 mod ui;
 
