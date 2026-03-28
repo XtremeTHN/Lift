@@ -1,12 +1,17 @@
 use super::page::{RomsPage, RomsPageImpl};
 use adw::subclass::prelude::*;
-use gtk::glib::{self, Object}; // your base
+use gtk::glib::{self, Object};
+use crate::usb::manager::Backend;
+use std::cell::OnceCell;
+use std::rc::Rc;
 
 mod imp {
     use super::*;
 
-    #[derive(Debug, Default)]
-    pub struct UsbRomsPage {}
+    #[derive(Default)]
+    pub struct UsbRomsPage {
+        pub backend: OnceCell<Rc<Backend>>
+    }
 
     #[glib::object_subclass]
     impl ObjectSubclass for UsbRomsPage {
@@ -28,7 +33,9 @@ glib::wrapper! {
 }
 
 impl UsbRomsPage {
-    pub fn new() -> Self {
-        Object::builder().build()
+    pub fn new(bc: Rc<Backend>) -> Self {
+        let obj: Self = Object::builder().build();
+        obj.imp().backend.set(bc);
+        obj
     }
 }

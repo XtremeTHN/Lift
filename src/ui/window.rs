@@ -90,7 +90,7 @@ impl LiftWindow {
                 .start(
                     move |_bc| {
                         log::info!("connected");
-                        let page = UsbRomsPage::new();
+                        let page = UsbRomsPage::new(_bc);
                         navigation_on_connect.push(&page);
                     },
                     move || {

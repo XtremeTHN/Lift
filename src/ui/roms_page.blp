@@ -11,15 +11,17 @@ template $RomsPage: Adw.NavigationPage {
             [end]
             Button {
                 icon-name: "user-trash-symbolic";
-                action-name: "clear-all";
                 tooltip-text: _("Clear all");
+
+                clicked => $on_clear_clicked() swapped;
             }
 
             [end]
             Button {
                 icon-name: "plus-large-symbolic";
-                action-name: "open";
                 tooltip-text: _("Add rom");
+
+                clicked => $on_open_rom_clicked() swapped;
             }
         }
 
@@ -54,7 +56,8 @@ template $RomsPage: Adw.NavigationPage {
                     child: Button {
                         hexpand: true;
                         label: _("Upload to switch");
-                        action-name: "upload";
+                        
+                        clicked => $on_upload_switch_clicked() swapped;
                     };
                 }
                 StackPage {
@@ -63,7 +66,8 @@ template $RomsPage: Adw.NavigationPage {
                     child: Button {
                         hexpand: true;
                         label: _("Cancel upload");
-                        action-name: "cancel-upload";
+                        
+                        clicked => $on_cancel_upload_clicked();
                     };
                 }
             }
