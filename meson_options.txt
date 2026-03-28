@@ -1,0 +1,6 @@
+option(
+    'portal',
+    type: 'boolean',
+    value: false,
+    description: 'Uses the usb portal to access the switch'
+)

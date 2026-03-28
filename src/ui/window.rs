@@ -3,7 +3,7 @@ use gtk::prelude::*;
 use gtk::{gio, glib};
 
 use super::home_page::HomePage;
-use super::roms_page::RomsPage;
+use super::roms_page::usb::UsbRomsPage;
 
 mod imp {
     use crate::finder::Finder;
@@ -29,20 +29,15 @@ mod imp {
 
         fn class_init(klass: &mut Self::Class) {
             HomePage::ensure_type();
-            RomsPage::ensure_type();
 
             klass.bind_template();
 
             klass.install_action_async("win.start-finder", None, async |page, _, _| {
-                page.imp().finder.start(
-                    |bc| {
-                        // log::info!("connected");
-                    },
-                    || {
-                        log::info!("disconnected");
-                    },
-                    page.clone(),
-                );
+                page.setup_finder().await;
+            });
+
+            klass.install_action("win.stop-finder", None, |page, _, _| {
+                page.imp().finder.stop();
             });
         }
 
@@ -51,7 +46,11 @@ mod imp {
         }
     }
 
-    impl ObjectImpl for LiftWindow {}
+    impl ObjectImpl for LiftWindow {
+        fn constructed(&self) {
+            self.parent_constructed();
+        }
+    }
     impl WidgetImpl for LiftWindow {}
     impl WindowImpl for LiftWindow {}
     impl ApplicationWindowImpl for LiftWindow {}
@@ -73,5 +72,25 @@ impl LiftWindow {
         glib::Object::builder()
             .property("application", application)
             .build()
+    }
+
+    async fn setup_finder(&self) {
+        let imp = self.imp();
+        let navigation_on_connect = imp.navigation.clone();
+        let navigation_on_disconnect = imp.navigation.clone();
+        imp.finder
+            .start(
+                move |_bc| {
+                    log::info!("connected");
+                    let page = UsbRomsPage::new();
+                    navigation_on_connect.push(&page);
+                },
+                move || {
+                    log::info!("disconnected");
+                    navigation_on_disconnect.pop_to_tag("home-page");
+                },
+                self.clone(),
+            )
+            .await;
     }
 }

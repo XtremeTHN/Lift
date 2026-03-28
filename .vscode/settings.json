@@ -1,3 +1,8 @@
 {
-    "mesonbuild.configureOnOpen": false
+    "mesonbuild.configureOnOpen": false,
+    "rust-analyzer.cargo.noDefaultFeatures": true,
+    "rust-analyzer.cargo.features": ["portal"],
+    "[rust]": {
+        "editor.formatOnSave": true
+    }
 }

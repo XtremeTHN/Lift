@@ -1,5 +1,5 @@
-use gtk::prelude::*;
 use adw::subclass::prelude::*;
+use gtk::prelude::*;
 use gtk::{gio, glib};
 
 mod imp {
@@ -34,3 +34,7 @@ glib::wrapper! {
         @extends gtk::Widget, adw::NavigationPage,
         @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget;
 }
+
+pub trait RomsPageImpl: NavigationPageImpl {}
+
+unsafe impl<T: RomsPageImpl> IsSubclassable<T> for RomsPage {}
