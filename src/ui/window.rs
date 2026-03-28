@@ -32,8 +32,8 @@ mod imp {
 
             klass.bind_template();
 
-            klass.install_action_async("win.start-finder", None, async |page, _, _| {
-                page.setup_finder().await;
+            klass.install_action("win.start-finder", None, |page, _, _| {
+                page.setup_finder();
             });
 
             klass.install_action("win.stop-finder", None, |page, _, _| {
@@ -49,6 +49,9 @@ mod imp {
     impl ObjectImpl for LiftWindow {
         fn constructed(&self) {
             self.parent_constructed();
+
+            self.obj().setup_finder();
+            // self.activate_action("win.start-finder", None);
         }
     }
     impl WidgetImpl for LiftWindow {}
@@ -74,23 +77,29 @@ impl LiftWindow {
             .build()
     }
 
-    async fn setup_finder(&self) {
+    fn setup_finder(&self) {
         let imp = self.imp();
         let navigation_on_connect = imp.navigation.clone();
         let navigation_on_disconnect = imp.navigation.clone();
-        imp.finder
-            .start(
-                move |_bc| {
-                    log::info!("connected");
-                    let page = UsbRomsPage::new();
-                    navigation_on_connect.push(&page);
-                },
-                move || {
-                    log::info!("disconnected");
-                    navigation_on_disconnect.pop_to_tag("home-page");
-                },
-                self.clone(),
-            )
-            .await;
+
+        let _obj = self.clone();
+        glib::MainContext::default().spawn_local(async move {
+            let obj = _obj.clone();
+            let imp = obj.imp();
+            imp.finder
+                .start(
+                    move |_bc| {
+                        log::info!("connected");
+                        let page = UsbRomsPage::new();
+                        navigation_on_connect.push(&page);
+                    },
+                    move || {
+                        log::info!("disconnected");
+                        navigation_on_disconnect.pop_to_tag("home-page");
+                    },
+                    _obj,
+                )
+                .await;
+        });
     }
 }
