@@ -68,10 +68,6 @@ mod imp {
             let _ = self
                 .obj()
                 .activate_action("navigation.push", Some("roms-page".to_variant().as_ref()));
-
-            let _ = self
-                .obj()
-                .activate_action("set-net", Some(true.to_variant().as_ref()));
         }
     }
 }
