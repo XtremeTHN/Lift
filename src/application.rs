@@ -72,7 +72,7 @@ impl LiftApplication {
     fn show_about(&self) {
         let window = self.active_window().unwrap();
         let about = adw::AboutDialog::builder()
-            .application_name("lift")
+            .application_name("Lift")
             .application_icon("com.github.XtremeTHN.Lift")
             .developer_name("Axel Andres Valles Gonzalez")
             .version(VERSION)
