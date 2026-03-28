@@ -4,8 +4,8 @@ use crate::usb::{
 };
 
 use super::{DeviceAction, UsbBackend};
-use async_channel::Sender;
-use gtk4::glib::MainContext;
+use async_std::channel::Sender;
+use gtk::glib::MainContext;
 use gudev::{
     Client,
     prelude::{ClientExt, DeviceExt},
@@ -92,7 +92,7 @@ impl UsbBackend for GUdevBackend {
         Ok(())
     }
 
-    fn set_native(&self, _: gtk4::Native) {}
+    fn set_native(&self, _: gtk::Native) {}
 
     async fn device(&self) -> Result<SwitchProtocol, UsbBackendErrors> {
         let handle = find_switch(&self.ctx)?;

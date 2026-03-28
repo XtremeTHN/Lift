@@ -1,7 +1,7 @@
 use gtk::prelude::*;
 use adw::subclass::prelude::*;
-use gtk::{gio, glib};
-use std::net::{IpAddr, Ipv4Addr};
+use gtk::glib;
+use std::net::IpAddr;
 
 mod imp {
     use super::*;

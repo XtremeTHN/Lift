@@ -1,7 +1,7 @@
 #[cfg(feature = "portal")]
 use ashpd::zvariant::OwnedFd;
 use binrw::BinRead;
-use gtk4::gio::prelude::{CancellableExt, FileExt, InputStreamExt, SeekableExt};
+use gtk::{gio::{self, prelude::{CancellableExt, FileExt, InputStreamExt, SeekableExt}}, glib};
 use log::{info, warn};
 use rusb::Error;
 use rusb::{ConfigDescriptor, Context, DeviceHandle, UsbContext};
@@ -10,11 +10,10 @@ use std::io::Cursor;
 use std::os::fd::AsRawFd;
 use std::string::FromUtf8Error;
 
-use gtk4::{gio, glib};
 use std::sync::Arc;
 
 use super::daemon::{UsbCommand, spawn_daemon};
-use async_channel::Sender;
+use async_std::channel::{self, Sender};
 
 #[repr(u32)]
 enum ProtocolCommand {
@@ -57,11 +56,11 @@ pub enum ProtocolError {
     #[error("Endpoint not found: {0}")]
     EndpointNotFound(String),
     #[error("Command send failed: {0}")]
-    DaemonSend(#[from] async_channel::SendError<UsbCommand>),
+    DaemonSend(#[from] channel::SendError<UsbCommand>),
     #[error("Callback send failed: {0}")]
-    CallbackSend(#[from] async_channel::SendError<UsbOperation>),
+    CallbackSend(#[from] channel::SendError<UsbOperation>),
     #[error("Command recv failed: {0}")]
-    Recv(#[from] async_channel::RecvError),
+    Recv(#[from] channel::RecvError),
     #[error("libusb error: {0}")]
     Rusb(#[from] Error),
     #[error("Binary parse failed: {0}")]
@@ -263,7 +262,7 @@ impl SwitchProtocol {
     async fn write(&self, buf: &[u8]) -> ProtocolResult<()> {
         let sender = self.daemon_sender.as_ref().unwrap();
 
-        let (_send, rec) = async_channel::bounded(1);
+        let (_send, rec) = channel::bounded(1);
 
         // i think `buf.to_vec()` is going to be a problem
         sender
@@ -277,7 +276,7 @@ impl SwitchProtocol {
     async fn read_with_timeout(&self, size: usize, timeout: u64) -> ProtocolResult<Vec<u8>> {
         let sender = self.daemon_sender.as_ref().unwrap();
 
-        let (_send, rec) = async_channel::bounded(1);
+        let (_send, rec) = channel::bounded(1);
         sender.send(UsbCommand::Read(size, _send, timeout)).await?;
 
         Ok(rec.recv().await??)

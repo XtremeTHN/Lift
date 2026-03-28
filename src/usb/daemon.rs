@@ -1,5 +1,5 @@
-use async_channel::{Sender, unbounded};
-use gtk4::gio;
+use async_std::channel::{Sender, unbounded};
+use gtk::gio;
 use rusb::{Context, DeviceHandle, Result};
 use std::time::Duration;
 

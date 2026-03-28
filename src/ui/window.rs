@@ -44,7 +44,10 @@ mod imp {
 
 glib::wrapper! {
     pub struct LiftWindow(ObjectSubclass<imp::LiftWindow>)
-        @extends gtk::Widget, gtk::Window, gtk::ApplicationWindow, adw::ApplicationWindow,        @implements gio::ActionGroup, gio::ActionMap;
+        @extends gtk::ApplicationWindow, gtk::Window, gtk::Widget,
+        @implements gio::ActionGroup, gio::ActionMap, gtk::Accessible, gtk::Buildable,
+                    gtk::ConstraintTarget, gtk::Native, gtk::Root, gtk::ShortcutManager,
+                    adw::ApplicationWindow;
 }
 
 impl LiftWindow {

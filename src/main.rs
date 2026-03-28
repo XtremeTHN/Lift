@@ -1,5 +1,6 @@
 mod application;
 mod config;
+mod usb;
 mod ui;
 
 use self::application::LiftApplication;

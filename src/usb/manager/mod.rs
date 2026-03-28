@@ -29,7 +29,7 @@ pub trait UsbBackend {
     type Error;
 
     async fn start(&self) -> Result<(), Self::Error>;
-    fn set_native(&self, native: gtk4::Native);
+    fn set_native(&self, native: gtk::Native);
     async fn device(&self) -> Result<SwitchProtocol, UsbBackendErrors>;
 }
 
