@@ -5,6 +5,7 @@
     <file preprocess="xml-stripblanks">home_page.ui</file>
     <file preprocess="xml-stripblanks">roms_page.ui</file>
     <file preprocess="xml-stripblanks">settings.ui</file>
+    <file preprocess="xml-stripblanks">rom.ui</file>
   </gresource>
 
   <gresource prefix="/com/github/XtremeTHN/Lift/icons/scalable/actions">
