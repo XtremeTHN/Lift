@@ -6,6 +6,8 @@
     <file preprocess="xml-stripblanks">roms_page.ui</file>
     <file preprocess="xml-stripblanks">settings.ui</file>
     <file preprocess="xml-stripblanks">rom.ui</file>
+
+    <file>style.css</file>
   </gresource>
 
   <gresource prefix="/com/github/XtremeTHN/Lift/icons/scalable/actions">
