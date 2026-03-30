@@ -4,8 +4,11 @@ use gtk::{gio, glib};
 
 use super::home_page::HomePage;
 use super::roms_page::usb::UsbRomsPage;
+use super::settings::LiftSettings;
 
 mod imp {
+    use adw::prelude::AdwDialogExt;
+
     use crate::finder::Finder;
 
     use super::*;
@@ -39,6 +42,11 @@ mod imp {
             klass.install_action("win.stop-finder", None, |page, _, _| {
                 page.imp().finder.stop();
             });
+
+            klass.install_action("win.settings", None, |page, _, _| {
+                let settings = LiftSettings::new();
+                settings.present(Some(page));
+            });
         }
 
         fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
@@ -51,7 +59,8 @@ mod imp {
             self.parent_constructed();
 
             self.obj().setup_finder();
-            // self.activate_action("win.start-finder", None);
+
+            // let rom =
         }
     }
     impl WidgetImpl for LiftWindow {}
