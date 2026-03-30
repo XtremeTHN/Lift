@@ -24,10 +24,11 @@ use binrw::BinRead;
 
 #[derive(Debug)]
 pub struct RomData {
-    texture_data: Option<gdk::Texture>,
-    title: String,
-    version: String,
-    meta_type: ContentMetaType,
+    pub texture_data: Option<gdk::Texture>,
+    pub title: String,
+    pub version: String,
+    pub meta_type: ContentMetaType,
+    pub size: i64,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -38,6 +39,8 @@ pub enum FromGFileErrors {
     NoExtension(PathBuf),
     #[error("File is not a rom: {0}")]
     InvalidExt(PathBuf),
+    #[error("GLib error: {0}")]
+    GLib(#[from] glib::Error),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -90,6 +93,7 @@ pub struct RomDataLoader {
     ext: String,
     language: TitleLanguage,
     keyring_path: String,
+    size: i64,
 }
 
 impl RomDataLoader {
@@ -255,10 +259,12 @@ impl RomDataLoader {
             title: name_and_version.0,
             version: name_and_version.1,
             meta_type: cnmt_type.unwrap(),
+            size: self.size,
         };
 
         Ok(data)
     }
+
     fn handle_nsp(&self) -> Result<RomData, HandlingErrors> {
         let mut file = File::open(self.path.clone())?;
 
@@ -286,15 +292,24 @@ impl RomDataLoader {
             return Err(FromGFileErrors::InvalidExt(_path));
         }
 
+        let querier = file.query_info(
+            "standard::size",
+            gio::FileQueryInfoFlags::NONE,
+            None::<&gio::Cancellable>,
+        )?;
+
         Ok(Self {
             keyring_path,
             ext,
             path,
             language,
+            size: querier.size(),
         })
     }
 
     pub fn load(&self) -> Result<RomData, HandlingErrors> {
+        // let size = self.path
+
         // if self.ext == "nsp" {
         return self.handle_nsp();
         // }
