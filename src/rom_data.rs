@@ -9,7 +9,7 @@ use gtk::{
     glib,
 };
 use nxroms::formats::cnmt::PackagedContentMetaHeader;
-use nxroms::formats::nacp::{Nacp, TitleLanguage};
+use nxroms::formats::nacp::{Nacp, Title, TitleLanguage};
 use nxroms::formats::nca::{ContentType, Nca, NcaErrors};
 use nxroms::fs::pfs::PartitionFsErrors;
 use nxroms::fs::romfs::{RomFs, RomFsErrors, RomFsFileEntry};
@@ -97,12 +97,19 @@ pub struct RomDataLoader {
 }
 
 impl RomDataLoader {
+    fn check_title(&self, title: &Title) -> bool {
+        !title.raw_name.iter().all(|v| v == &0)
+    }
+
     fn handle_nacp(&self, nacp: Nacp) -> Result<(String, String), NacpErrors> {
         let title = nacp
             .titles
             .get(self.language as usize)
-            .or_else(|| nacp.titles.get(0))
+            .filter(|t| self.check_title(t))
+            .or_else(|| nacp.titles.first())
             .ok_or(NacpErrors::NoSuitableLanguage)?;
+
+        if title.raw_name.iter().all(|v| v == &0) {}
 
         Ok((title.name()?, nacp.version()?))
     }
