@@ -75,8 +75,8 @@ mod imp {
         #[template_callback]
         async fn on_open_rom_clicked(&self, _: gtk::Button) {
             let filter = gtk::FileFilter::new();
-            filter.add_suffix("nsp");
             filter.add_suffix("xci");
+            filter.add_suffix("nsp");
 
             let dialog = gtk::FileDialog::builder()
                 .default_filter(&filter)

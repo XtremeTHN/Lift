@@ -1,4 +1,7 @@
-use crate::rom_data::{FromGFileErrors, HandlingErrors, RomData, RomDataLoader};
+use crate::{
+    rom_data::{FromGFileErrors, HandlingErrors, RomData, RomDataLoader},
+    utils,
+};
 use gtk::{
     gio,
     glib::{self, Object},
@@ -113,19 +116,22 @@ impl Rom {
                 let data = res?;
                 let imp = self.imp();
 
-                log::info!("{:?}", data);
                 if let Some(data) = data.texture_data {
                     imp.icon.set_paintable(Some(&data));
                 } else {
-                    let img = gtk::Image::from_icon_name("image-missing-symbolic");
+                    let img = gtk::Image::builder()
+                        .icon_name("image-missing-symbolic")
+                        .pixel_size(60)
+                        .build();
                     imp.frame.set_child(Some(&img));
                 }
 
                 imp.rom_title.set_label(&data.title);
-                imp.rom_version.set_label(&data.version);
+                imp.rom_version
+                    .set_label(&format!("Version: {}", data.version));
 
                 let fmt_size = glib::format_size(data.size.clamp(0, i64::MAX) as u64);
-                imp.rom_size.set_label(&fmt_size);
+                imp.rom_size.set_label(&format!("Size: {}", fmt_size));
 
                 match data.meta_type {
                     ContentMetaType::Patch => {
@@ -138,8 +144,12 @@ impl Rom {
                             .set_icon_name(Some("application-x-addon-symbolic"));
                         imp.rom_type_icon.set_visible(true);
                     }
+                    ContentMetaType::Application => {}
                     _ => {
-                        println!("{:?}", data.meta_type);
+                        utils::send_error(
+                            self,
+                            &format!("Unknown content meta type: {:?}", data.meta_type),
+                        );
                     }
                 }
             }
