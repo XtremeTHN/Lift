@@ -58,36 +58,28 @@ template $Rom: ListBoxRow {
         }
       }
 
-      Button end_button {
-        valign: center;
-        halign: end;
+      Stack button_stack {
+        StackPage {
+          name: "remove";
 
-        child: Stack button_stack {
-          transition-type: crossfade;
-
-          StackPage {
-            name: "remove";
+          child: Button {
+            valign: center;
+            halign: center;
 
             child: Image {
               icon-name: "user-trash-symbolic";
             };
-          }
 
-          StackPage {
-            name: "progress";
+            clicked => $remove_rom() swapped;
+          };
+        }
 
-            child: Image img {
-              margin-top: 2;
-              margin-end: 2;
-              margin-start: 2;
-              margin-bottom: 2;
-
-              paintable: $CircularProgressPaintable prog_bar {};
-            };
-          }
-        };
-
-        clicked => $remove_rom() swapped;
+        StackPage {
+          name: "progress";
+          child: Image img {
+            paintable: $CircularProgressPaintable prog_bar {};
+          };
+        }
       }
     }
   };

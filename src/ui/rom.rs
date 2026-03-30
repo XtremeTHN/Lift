@@ -38,9 +38,6 @@ mod imp {
         pub rom_size: TemplateChild<gtk::Label>,
 
         #[template_child]
-        pub end_button: TemplateChild<gtk::Button>,
-
-        #[template_child]
         pub button_stack: TemplateChild<gtk::Stack>,
 
         #[template_child]
@@ -66,7 +63,11 @@ mod imp {
         }
     }
 
-    impl ObjectImpl for Rom {}
+    impl ObjectImpl for Rom {
+        fn constructed(&self) {
+            self.prog_bar.imp().set_widget(self.img.clone());
+        }
+    }
     impl WidgetImpl for Rom {}
     impl ListBoxRowImpl for Rom {}
 
