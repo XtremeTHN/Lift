@@ -74,34 +74,22 @@ template $RomsPage: Adw.NavigationPage {
         }
 
         content: ScrolledWindow {
-            child: Stack stack {
-                transition-type: crossfade;
+            child: Adw.Clamp {
+                child: ListBox list_box {
+                    styles [
+                        "margin-10",
+                        "roms"
+                    ]
 
-                StackPage {
-                    name: "placeholder";
+                    selection-mode: none;
 
-                    child: Adw.StatusPage {
+                    [placeholder]
+                    Adw.StatusPage {
                         icon-name: "nintendo-controller-symbolic";
                         title: _("No rooms");
                         description: _("Add roms through the plus button above. Only .nsp or .xci roms are allowed.");
-                    };
-                }
-
-                StackPage {
-                    name: "roms";
-
-                    child: Adw.Clamp {
-                        child: ListBox list_box {
-                            styles [
-                                "boxed-list",
-                                "margin-10",
-                            ]
-
-                            valign: start;
-                            selection-mode: none;
-                        };
-                    };
-                }
+                    }
+                };
             };
         };
     };

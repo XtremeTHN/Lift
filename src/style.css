@@ -13,3 +13,21 @@
 .margin-10 {
     margin: 10px;
 }
+
+.roms {
+	background: none;
+}
+
+.roms > row {
+	background-color: var(--card-bg-color);
+	border-radius: 12px;
+      	box-shadow: 0 0 0 1px RGB(0 0 6 / 3%),
+                  0 1px 3px 1px RGB(0 0 6 / 7%),
+                  0 2px 6px 2px RGB(0 0 6 / 3%),
+                  inset 0 0 0 1px alpha(black, 0.4);
+	margin-bottom: 12px;
+}
+
+.roms > row:last-child {
+	margin-bottom: 0px;
+}

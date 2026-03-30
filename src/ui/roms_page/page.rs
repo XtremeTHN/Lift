@@ -26,9 +26,6 @@ mod imp {
         pub total_progress: TemplateChild<gtk::ProgressBar>,
 
         #[template_child]
-        pub stack: TemplateChild<gtk::Stack>,
-
-        #[template_child]
         pub list_box: TemplateChild<gtk::ListBox>,
 
         #[template_child]
@@ -104,8 +101,6 @@ mod imp {
                         true
                     })
                     .await;
-
-                    self.stack.set_visible_child_name("roms");
                 }
             } else {
                 utils::send_error(&obj.clone(), "Couldn't get active window");

@@ -13,6 +13,8 @@ use nxroms::formats::{cnmt::ContentMetaType, nacp::TitleLanguage};
 use super::circular_progress_paintable::CircularProgressPaintable;
 
 mod imp {
+    use gtk::{ListBox, glib::object::Cast, prelude::ListBoxRowExt};
+
     use super::*;
     // use self::crate
 
@@ -74,7 +76,14 @@ mod imp {
     #[gtk::template_callbacks]
     impl Rom {
         #[template_callback]
-        fn remove_rom(&self) {}
+        fn remove_rom(&self) {
+            let obj = self.obj();
+            let parent = obj.parent().unwrap();
+
+            if let Ok(list) = parent.downcast::<ListBox>() {
+                list.remove(&obj.clone());
+            }
+        }
     }
 }
 
