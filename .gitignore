@@ -3,3 +3,6 @@ target
 config.rs
 result
 installation
+*.nsp
+*.xci
+*.bin
