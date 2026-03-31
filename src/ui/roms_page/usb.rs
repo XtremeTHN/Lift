@@ -7,12 +7,13 @@ use std::cell::OnceCell;
 use std::rc::Rc;
 
 mod imp {
-    use std::cell::Cell;
+    use std::{cell::Cell, collections::HashMap};
 
     use async_std::channel::{Receiver, bounded};
     use gtk::{gio, glib::object::ObjectExt};
 
     use crate::{
+        ui::rom::Rom,
         usb::{async_protocol::UsbOperation, manager::UsbBackend},
         utils::{self, CancellableAsyncTasks},
     };
@@ -82,7 +83,16 @@ mod imp {
             receiver: Receiver<UsbOperation>,
             page: RomsPage,
             total_size: i64,
+            rows: Vec<Rom>,
         ) {
+            let hash: HashMap<String, Rom> = rows
+                .iter()
+                .filter_map(|r| {
+                    let n = r.path().file_name()?.to_string_lossy().to_string();
+                    Some((n, r.clone()))
+                })
+                .collect();
+
             let imp = page.imp();
             while let Ok(msg) = receiver.recv().await {
                 match msg {
@@ -91,7 +101,7 @@ mod imp {
                         imp.info_label.set_label(&format!("Sending {}...", name));
 
                         page.add_progress(chunk_read as i64, total_size);
-                        if let Some(rom) = page.rom(&name) {
+                        if let Some(rom) = hash.get(&*name) {
                             rom.set_progress_visible(true);
                             rom.add_progress(chunk_read as i64);
                         } else {
@@ -116,6 +126,8 @@ mod imp {
             let obj = self.obj();
             let page = obj.upcast_ref::<RomsPage>();
 
+            // TODO: optimize this
+            // maybe use only one for loop?
             let rows = page.all_rows()?;
             let files = rows
                 .iter()
@@ -163,7 +175,7 @@ mod imp {
                         #[weak]
                         page,
                         async move {
-                            imp.receive_events(receiver, page, total_size).await;
+                            imp.receive_events(receiver, page, total_size, rows).await;
                         }
                     ));
 
