@@ -1,10 +1,12 @@
+use std::path::PathBuf;
+
 use crate::{
     rom_data::{FromGFileErrors, HandlingErrors, RomData, RomDataLoader},
     utils,
 };
 use gtk::{
-    gio,
-    glib::{self, Object},
+    gio::{self, prelude::FileExt},
+    glib::{self, GString, Object},
     prelude::{FrameExt, WidgetExt},
     subclass::prelude::{ListBoxRowImpl, *},
 };
@@ -13,7 +15,8 @@ use nxroms::formats::{cnmt::ContentMetaType, nacp::TitleLanguage};
 use super::circular_progress_paintable::CircularProgressPaintable;
 
 mod imp {
-    use gtk::{ListBox, glib::object::Cast, prelude::ListBoxRowExt};
+    use gtk::{ListBox, glib::object::Cast};
+    use std::cell::{OnceCell, RefCell};
 
     use super::*;
     // use self::crate
@@ -47,6 +50,10 @@ mod imp {
 
         #[template_child]
         pub prog_bar: TemplateChild<CircularProgressPaintable>,
+
+        pub current_progress: RefCell<f64>,
+        pub size: RefCell<i64>,
+        pub file: OnceCell<gio::File>,
     }
 
     #[glib::object_subclass]
@@ -108,12 +115,52 @@ impl Rom {
         Object::builder().build()
     }
 
+    pub fn size(&self) -> i64 {
+        self.imp().size.borrow().clone()
+    }
+
+    pub fn add_progress(&self, bytes: i64) {
+        let imp = self.imp();
+        let old = imp.current_progress.borrow().clone();
+        let new = (bytes as f64 / *imp.size.borrow() as f64) + old;
+
+        imp.current_progress.replace(new);
+        imp.prog_bar.imp().set_progress(new);
+    }
+
+    pub fn set_progress_visible(&self, visible: bool) {
+        let imp = self.imp();
+
+        if visible {
+            if imp.button_stack.visible_child_name() != Some(GString::from("progress")) {
+                imp.button_stack.set_visible_child_name("progress");
+            }
+        } else {
+            imp.prog_bar.imp().set_progress(0.0);
+            imp.current_progress.replace(0.0);
+            imp.button_stack.set_visible_child_name("remove");
+        }
+    }
+
+    pub fn file(&self) -> &gio::File {
+        self.imp().file.get().unwrap()
+    }
+
+    pub fn path(&self) -> PathBuf {
+        self.file().path().unwrap()
+    }
+
     pub async fn populate(
         &self,
         file: gio::File,
         language: i32,
         keyring_path: String,
     ) -> Result<(), RomErrors> {
+        self.imp()
+            .file
+            .set(file.clone())
+            .expect("populate() should be called once");
+
         let lang = TitleLanguage::try_from(language).expect("language not in range");
         let data = gio::spawn_blocking(move || -> Result<RomData, RomErrors> {
             let loader = RomDataLoader::from_gfile(file, lang, keyring_path)?;
@@ -135,6 +182,8 @@ impl Rom {
                         .build();
                     imp.frame.set_child(Some(&img));
                 }
+
+                imp.size.replace(data.size);
 
                 imp.rom_title.set_label(&data.title);
                 imp.rom_version
