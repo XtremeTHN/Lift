@@ -84,16 +84,16 @@ mod imp {
             total_size: i64,
         ) {
             let imp = page.imp();
-            while let Some(msg) = receiver.recv().await.iter().next() {
+            while let Ok(msg) = receiver.recv().await {
                 match msg {
                     UsbOperation::File(name, chunk_read) => {
                         page.set_pulse(false);
                         imp.info_label.set_label(&format!("Sending {}...", name));
 
-                        page.add_progress(*chunk_read as i64, total_size);
-                        if let Some(rom) = page.rom(name) {
+                        page.add_progress(chunk_read as i64, total_size);
+                        if let Some(rom) = page.rom(&name) {
                             rom.set_progress_visible(true);
-                            rom.add_progress(*chunk_read as i64);
+                            rom.add_progress(chunk_read as i64);
                         } else {
                             utils::send_error(
                                 &*self.obj(),
