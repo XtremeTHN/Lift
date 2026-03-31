@@ -10,6 +10,7 @@ use super::settings::LiftSettings;
 
 mod imp {
     use adw::prelude::AdwDialogExt;
+    use gtk::glib::VariantTy;
 
     use crate::finder::Finder;
 
@@ -37,17 +38,26 @@ mod imp {
 
             klass.bind_template();
 
-            klass.install_action("win.start-finder", None, |page, _, _| {
-                page.setup_finder();
+            klass.install_action("win.start-finder", None, |win, _, _| {
+                win.setup_finder();
             });
 
-            klass.install_action("win.stop-finder", None, |page, _, _| {
-                page.imp().finder.stop();
+            klass.install_action("win.stop-finder", None, |win, _, _| {
+                win.imp().finder.stop();
             });
 
-            klass.install_action("win.settings", None, |page, _, _| {
+            klass.install_action("win.settings", None, |win, _, _| {
                 let settings = LiftSettings::new();
-                settings.present(Some(page));
+                settings.present(Some(win));
+            });
+
+            klass.install_action("win.toast", Some(VariantTy::STRING), |win, _, arg| {
+                let msg = arg.unwrap().str();
+                if let Some(_msg) = msg {
+                    win.add_toast(_msg);
+                } else {
+                    log::warn!("Toast: Argument was not a string");
+                }
             });
         }
 
@@ -86,6 +96,11 @@ impl LiftWindow {
         glib::Object::builder()
             .property("application", application)
             .build()
+    }
+
+    pub fn add_toast(&self, message: &str) {
+        let toast = adw::Toast::new(message);
+        self.imp().toast.add_toast(toast);
     }
 
     fn setup_finder(&self) {
