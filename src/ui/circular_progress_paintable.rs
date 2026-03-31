@@ -97,7 +97,13 @@ mod imp {
 
     impl CircularProgressPaintable {
         pub fn set_progress(&self, value: f64) {
-            self.progress.set(value.clamp(0.0, 1.0));
+            let clamped = value.clamp(0.0, 1.0);
+            self.progress.set(clamped);
+
+            if clamped == 1.0 {
+                self.set_color(Color::Success);
+            }
+
             self.obj().invalidate_contents();
         }
 
