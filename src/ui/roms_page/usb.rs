@@ -83,15 +83,8 @@ mod imp {
             receiver: Receiver<UsbOperation>,
             page: RomsPage,
             total_size: i64,
-            rows: Vec<Rom>,
         ) {
-            let hash: HashMap<String, Rom> = rows
-                .iter()
-                .filter_map(|r| {
-                    let n = r.path().file_name()?.to_string_lossy().to_string();
-                    Some((n, r.clone()))
-                })
-                .collect();
+            let hash: HashMap<String, Rom> = page.roms_hash();
 
             let imp = page.imp();
             while let Ok(msg) = receiver.recv().await {
@@ -175,7 +168,7 @@ mod imp {
                         #[weak]
                         page,
                         async move {
-                            imp.receive_events(receiver, page, total_size, rows).await;
+                            imp.receive_events(receiver, page, total_size).await;
                         }
                     ));
 
