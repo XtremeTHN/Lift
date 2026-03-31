@@ -146,11 +146,16 @@ glib::wrapper! {
 }
 
 impl RomsPage {
-    fn iterate_rows<F: FnMut(Rom, i32)>(&self, mut cb: F) -> Option<()> {
+    fn iterate_rows<F: FnMut(Rom, i32)>(&self, mut cb: F) {
         let imp = self.imp();
-        let first = imp.list_box.first_child()?;
+        let Some(first) = imp.list_box.first_child() else {
+            return;
+        };
 
-        let mut rom = first.downcast::<Rom>().ok()?;
+        let Some(mut rom) = first.downcast::<Rom>().ok() else {
+            return;
+        };
+
         cb(rom.clone(), 0);
 
         let mut index = 0;
@@ -167,14 +172,12 @@ impl RomsPage {
                 break;
             }
         }
-
-        None
     }
 
     pub fn all_rows(&self) -> Option<Vec<Rom>> {
         let mut vec: Vec<Rom> = vec![];
 
-        self.iterate_rows(|row, i| {
+        self.iterate_rows(|row, _| {
             vec.push(row);
         });
 
