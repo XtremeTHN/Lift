@@ -138,9 +138,11 @@ impl SwitchProtocol {
     /// protocol.send_roms(vec!["ori.xci", "undertale.nsp"]);
     /// ```
     pub async fn send_roms(&self, roms: Vec<gio::File>) -> ProtocolResult<()> {
-        let files = FileVecBuilder::new().suffix("\n").gfiles(roms).build();
+        let files = FileVecBuilder::new().gfiles(roms).build();
 
-        self.send_list_header(files.len() as u32).await?;
+        self.send_list_header(files.iter().flatten().collect::<Vec<&u8>>().len() as u32)
+            .await?;
+
         for file in files {
             self.write(&file).await?;
         }
@@ -159,23 +161,8 @@ impl SwitchProtocol {
     /// Handles the commands sent by the switch
     /// Call find_switch() before using this function
     /// Send the roms before using this function
-    pub async fn poll_commands(
-        &mut self,
-        cancellable: Option<gio::Cancellable>,
-        sender: Sender<UsbOperation>,
-    ) -> ProtocolResult<()> {
-        let _cancellable = if let Some(c) = cancellable {
-            c
-        } else {
-            gio::Cancellable::new()
-        };
-
+    pub async fn poll_commands(&mut self, sender: Sender<UsbOperation>) -> ProtocolResult<()> {
         loop {
-            if _cancellable.is_cancelled() {
-                info!("Cancelled");
-                break;
-            }
-
             let _ = sender.send(UsbOperation::Wait).await;
             let header = self.read_with_timeout(0x20, 0).await?;
 
@@ -192,11 +179,11 @@ impl SwitchProtocol {
                 }
                 Ok(ProtocolCommand::FileRange) => {
                     info!("Recieved FileRange command");
-                    self.send_file(false, &sender, &_cancellable).await?;
+                    self.send_file(false, &sender).await?;
                 }
                 Ok(ProtocolCommand::FileRangePadded) => {
                     info!("Recieved FileRangePadded command");
-                    self.send_file(true, &sender, &_cancellable).await?;
+                    self.send_file(true, &sender).await?;
                 }
                 Err(_) => {
                     warn!("Invalid command id");
@@ -323,12 +310,7 @@ impl SwitchProtocol {
         Ok(())
     }
 
-    async fn send_file(
-        &self,
-        padded: bool,
-        sender: &Sender<UsbOperation>,
-        cancellable: &gio::Cancellable,
-    ) -> ProtocolResult<()> {
+    async fn send_file(&self, padded: bool, sender: &Sender<UsbOperation>) -> ProtocolResult<()> {
         let cmd = if padded {
             ProtocolCommand::FileRangePadded
         } else {
@@ -357,7 +339,7 @@ impl SwitchProtocol {
         let data_start = if padded { PADDING_SIZE as usize } else { 0 };
 
         let name: Arc<str> = header.name.into();
-        while current_offset < header.range_size && !cancellable.is_cancelled() {
+        while current_offset < header.range_size {
             if current_offset + read_size >= header.range_size {
                 read_size = header.range_size - current_offset;
             }
