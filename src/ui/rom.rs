@@ -150,6 +150,10 @@ impl Rom {
         self.file().path().unwrap()
     }
 
+    pub fn reset_state(&self) {
+        self.set_progress_visible(false);
+    }
+
     pub async fn populate(
         &self,
         file: gio::File,

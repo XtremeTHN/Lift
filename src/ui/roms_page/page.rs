@@ -209,6 +209,21 @@ impl RomsPage {
         imp.progress_bar.set_fraction(new);
     }
 
+    pub fn reset_state(&self) {
+        let imp = self.imp();
+
+        imp.current_progress.replace(0.0);
+        imp.progress_bar.set_fraction(0.0);
+
+        self.set_pulse(false);
+        self.set_cancel_visible(false);
+        self.set_info_reveal(false);
+
+        self.iterate_rows(|r, _| {
+            r.reset_state();
+        });
+    }
+
     pub fn set_pulse(&self, pulse: bool) {
         let imp = self.imp();
         // ControlFlow::
@@ -231,6 +246,12 @@ impl RomsPage {
                 old.remove();
             }
         }
+    }
+
+    pub fn set_cancel_visible(&self, visible: bool) {
+        self.imp()
+            .top_button_stack
+            .set_visible_child_name(if visible { "cancel" } else { "upload" });
     }
 
     pub fn set_info_reveal(&self, reveal: bool) {
