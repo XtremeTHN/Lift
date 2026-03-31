@@ -1,7 +1,13 @@
 #[cfg(feature = "portal")]
 use ashpd::zvariant::OwnedFd;
 use binrw::BinRead;
-use gtk::{gio::{self, prelude::{CancellableExt, FileExt, InputStreamExt, SeekableExt}}, glib};
+use gtk::{
+    gio::{
+        self,
+        prelude::{CancellableExt, FileExt, InputStreamExt, SeekableExt},
+    },
+    glib,
+};
 use log::{info, warn};
 use rusb::Error;
 use rusb::{ConfigDescriptor, Context, DeviceHandle, UsbContext};
@@ -11,6 +17,8 @@ use std::os::fd::AsRawFd;
 use std::string::FromUtf8Error;
 
 use std::sync::Arc;
+
+use crate::utils::FileVecBuilder;
 
 use super::daemon::{UsbCommand, spawn_daemon};
 use async_std::channel::{self, Sender};
@@ -129,19 +137,12 @@ impl SwitchProtocol {
     /// ```
     /// protocol.send_roms(vec!["ori.xci", "undertale.nsp"]);
     /// ```
-    pub async fn send_roms(&self, roms: Vec<String>) -> ProtocolResult<()> {
-        let mut new_vec: Vec<String> = Vec::new();
-        let mut length = 0;
+    pub async fn send_roms(&self, roms: Vec<gio::File>) -> ProtocolResult<()> {
+        let files = FileVecBuilder::new().suffix("\n").gfiles(roms).build();
 
-        for file in roms {
-            new_vec.push(file.clone() + "\n");
-            length += file.len() + 1;
-        }
-
-        self.send_list_header(length as u32).await?;
-
-        for file in new_vec {
-            self.write(file.as_bytes()).await?;
+        self.send_list_header(files.len() as u32).await?;
+        for file in files {
+            self.write(&file).await?;
         }
 
         Ok(())
