@@ -132,7 +132,7 @@ mod imp {
                 Ok(mut dev) => {
                     if let Err(e) = dev.send_roms(files).await {
                         utils::send_error(
-                            &obj.clone(),
+                            &*obj,
                             &format!("Couldn't send roms to the switch: {}", e.to_string()),
                         );
 
@@ -170,10 +170,7 @@ mod imp {
                     self.tasks.set(Some(tasks));
                 }
                 Err(e) => {
-                    utils::send_error(
-                        &*self.obj(),
-                        &format!("Couldn't open device: {}", e.to_string()),
-                    );
+                    utils::send_error(&*obj, &format!("Couldn't open device: {}", e.to_string()));
                 }
             };
 
