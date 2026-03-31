@@ -105,7 +105,9 @@ mod imp {
                         imp.info_label.set_label("Waiting for command...");
                         page.set_pulse(true);
                     }
-                    UsbOperation::Exit => {}
+                    UsbOperation::Exit => {
+                        page.reset_state();
+                    }
                 }
             }
         }
@@ -138,6 +140,7 @@ mod imp {
                     };
 
                     page.set_info_reveal(true);
+                    page.set_cancel_visible(true);
 
                     let (sender, receiver) = bounded(1);
 
@@ -160,8 +163,7 @@ mod imp {
                         #[weak]
                         page,
                         async move {
-                            imp.receive_events(receiver, page.clone(), total_size).await;
-                            page.set_info_reveal(false);
+                            imp.receive_events(receiver, page, total_size).await;
                         }
                     ));
 
