@@ -11,6 +11,7 @@ use adw::prelude::Cast;
 use core::future::Future;
 
 pub fn send_error<W: IsA<gtk::Widget>>(widget: &W, message: &str) {
+    log::error!("{:?}: {}", widget, message);
     widget
         .activate_action("win.toast", Some(&message.to_string().to_variant()))
         .expect("toast");
