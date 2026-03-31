@@ -1,15 +1,22 @@
 use adw::subclass::prelude::*;
+use gtk::glib::ControlFlow;
 use gtk::prelude::*;
 use gtk::{gio, glib};
 
+use crate::ui::rom::Rom;
+
 mod imp {
+    use gtk::glib::subclass::Signal;
+
     use crate::{
-        rom_data::RomDataLoader,
         ui::{rom::Rom, window::LiftWindow},
         utils,
     };
 
-    use std::cell::OnceCell;
+    use std::{
+        cell::{OnceCell, RefCell},
+        sync::OnceLock,
+    };
 
     use super::*;
 
@@ -23,7 +30,7 @@ mod imp {
         pub info_label: TemplateChild<gtk::Label>,
 
         #[template_child]
-        pub total_progress: TemplateChild<gtk::ProgressBar>,
+        pub progress_bar: TemplateChild<gtk::ProgressBar>,
 
         #[template_child]
         pub list_box: TemplateChild<gtk::ListBox>,
@@ -32,6 +39,8 @@ mod imp {
         pub top_button_stack: TemplateChild<gtk::Stack>,
 
         pub settings: OnceCell<gio::Settings>,
+        pub pulse_task: RefCell<Option<glib::SourceId>>,
+        pub current_progress: RefCell<f64>,
     }
 
     #[glib::object_subclass]
@@ -58,9 +67,20 @@ mod imp {
             let settings = gio::Settings::new("com.github.XtremeTHN.Lift");
             let _ = self.settings.set(settings);
         }
+
+        fn signals() -> &'static [Signal] {
+            static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
+            SIGNALS.get_or_init(|| {
+                vec![
+                    Signal::builder("upload-clicked").build(),
+                    Signal::builder("cancel-clicked").build(),
+                ]
+            })
+        }
     }
     impl WidgetImpl for RomsPage {}
     impl NavigationPageImpl for RomsPage {}
+    impl RomsPageImpl for RomsPage {}
 
     #[gtk::template_callbacks]
     impl RomsPage {
@@ -108,10 +128,14 @@ mod imp {
         }
 
         #[template_callback]
-        fn on_upload_switch_clicked(&self, _: gtk::Button) {}
+        fn on_upload_switch_clicked(&self, _: gtk::Button) {
+            self.obj().emit_by_name::<()>("upload-clicked", &[]);
+        }
 
         #[template_callback]
-        fn on_cancel_upload_clicked(&self, _: gtk::Button) {}
+        fn on_cancel_upload_clicked(&self, _: gtk::Button) {
+            self.obj().emit_by_name::<()>("cancel-clicked", &[]);
+        }
     }
 }
 
@@ -119,6 +143,99 @@ glib::wrapper! {
     pub struct RomsPage(ObjectSubclass<imp::RomsPage>)
         @extends gtk::Widget, adw::NavigationPage,
         @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget;
+}
+
+impl RomsPage {
+    fn iterate_rows<F: FnMut(Rom, i32)>(&self, mut cb: F) -> Option<()> {
+        let imp = self.imp();
+        let first = imp.list_box.first_child()?;
+
+        let mut rom = first.downcast::<Rom>().ok()?;
+        cb(rom.clone(), 0);
+
+        let mut index = 0;
+        loop {
+            let next_row = rom.next_sibling();
+            index += 1;
+
+            if let Some(widget) = next_row
+                && let Some(row) = widget.downcast::<Rom>().ok()
+            {
+                cb(row.clone(), index);
+                rom = row;
+            } else {
+                break;
+            }
+        }
+
+        None
+    }
+
+    pub fn all_rows(&self) -> Option<Vec<Rom>> {
+        let mut vec: Vec<Rom> = vec![];
+
+        self.iterate_rows(|row, i| {
+            vec.push(row);
+        });
+
+        Some(vec)
+    }
+
+    pub fn rom(&self, file_name: &str) -> Option<Rom> {
+        let mut rom = None;
+        self.iterate_rows(|r, _| {
+            let path = r.path();
+
+            if let Some(name) = path.file_name()
+                && name == file_name
+            {
+                rom = Some(r);
+            }
+        });
+
+        rom
+    }
+
+    pub fn total_size(&self, rows: &Vec<Rom>) -> i64 {
+        rows.iter().map(|r| r.size()).sum()
+    }
+
+    pub fn add_progress(&self, bytes: i64, total_size: i64) {
+        let imp = self.imp();
+        let old = imp.current_progress.borrow().clone();
+        let new = (bytes as f64 / total_size as f64) + old;
+
+        imp.current_progress.replace(new);
+        imp.progress_bar.set_fraction(new);
+    }
+
+    pub fn set_pulse(&self, pulse: bool) {
+        let imp = self.imp();
+        // ControlFlow::
+        if pulse {
+            imp.pulse_task.replace(Some(glib::timeout_add_local(
+                std::time::Duration::from_millis(400),
+                glib::clone!(
+                    #[weak]
+                    imp,
+                    #[upgrade_or]
+                    ControlFlow::Break,
+                    move || {
+                        imp.progress_bar.pulse();
+                        ControlFlow::Continue
+                    }
+                ),
+            )));
+        } else {
+            if let Some(old) = imp.pulse_task.take() {
+                old.remove();
+            }
+        }
+    }
+
+    pub fn set_info_reveal(&self, reveal: bool) {
+        self.imp().rev.set_reveal_child(reveal);
+    }
 }
 
 pub trait RomsPageImpl: NavigationPageImpl {}

@@ -42,14 +42,14 @@ template $RomsPage: Adw.NavigationPage {
                         halign: start;
                     }
 
-                    ProgressBar total_progress {
+                    ProgressBar progress_bar {
                         pulse-step: 0.20;
                     }
                 };
             }
 
             Stack top_button_stack {
-                sensitive: false;
+                sensitive: true;
                 StackPage {
                     name: "upload";
 
