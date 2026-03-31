@@ -175,6 +175,7 @@ impl SwitchProtocol {
             match ProtocolCommand::try_from(raw_cmd) {
                 Ok(ProtocolCommand::Exit) => {
                     info!("Exit recieved");
+                    sender.send(UsbOperation::Exit).await?;
                     break;
                 }
                 Ok(ProtocolCommand::FileRange) => {
