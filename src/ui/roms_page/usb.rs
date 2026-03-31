@@ -183,6 +183,7 @@ mod imp {
         async fn cancel_upload(&self) {
             if let Some(t) = self.tasks.take() {
                 t.cancel_all();
+                self.obj().upcast_ref::<RomsPage>().reset_state();
             }
         }
     }
