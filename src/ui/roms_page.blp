@@ -67,7 +67,7 @@ template $RomsPage: Adw.NavigationPage {
                         hexpand: true;
                         label: _("Cancel upload");
                         
-                        clicked => $on_cancel_upload_clicked();
+                        clicked => $on_cancel_upload_clicked() swapped;
                     };
                 }
             }
