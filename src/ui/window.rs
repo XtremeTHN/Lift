@@ -2,6 +2,8 @@ use adw::subclass::prelude::*;
 use gtk::prelude::*;
 use gtk::{gio, glib};
 
+use crate::usb::manager::UsbBackend;
+
 use super::home_page::HomePage;
 use super::roms_page::usb::UsbRomsPage;
 use super::settings::LiftSettings;
@@ -95,10 +97,13 @@ impl LiftWindow {
         glib::MainContext::default().spawn_local(async move {
             let obj = _obj.clone();
             let imp = obj.imp();
+
+            let native = obj.native();
             imp.finder
                 .start(
                     move |_bc| {
                         log::info!("connected");
+                        _bc.set_native(native.clone().unwrap());
                         let page = UsbRomsPage::new(_bc);
                         navigation_on_connect.push(&page);
                     },
