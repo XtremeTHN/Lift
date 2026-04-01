@@ -114,8 +114,18 @@ mod imp {
                         let lang = settings.enum_("language");
                         let keyring_path = settings.string("keys-path");
 
-                        if let Err(e) = rom.populate(file, lang, keyring_path.to_string()).await {
-                            utils::send_error(&self.obj().clone(), &e.to_string());
+                        match rom.populate(file, lang, keyring_path.to_string()).await {
+                            Err(e) => {
+                                utils::send_error(&self.obj().clone(), &e.to_string());
+                                return true;
+                            }
+                            Ok(Some(e)) => {
+                                utils::send_error(
+                                    &*self.obj(),
+                                    &format!("Falling back to defaults: {}", e.to_string()),
+                                );
+                            }
+                            Ok(None) => {}
                         };
 
                         self.list_box.append(&rom);
@@ -241,6 +251,10 @@ impl RomsPage {
         self.iterate_rows(|r, _| {
             r.reset_state();
         });
+    }
+
+    pub fn set_info(&self, msg: &str) {
+        self.imp().info_label.set_label(msg);
     }
 
     pub fn set_pulse(&self, pulse: bool) {

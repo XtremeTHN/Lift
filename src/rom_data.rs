@@ -29,6 +29,7 @@ pub struct RomData {
     pub version: String,
     pub meta_type: ContentMetaType,
     pub size: i64,
+    pub error: Option<HandlingErrors>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -267,6 +268,7 @@ impl RomDataLoader {
             version: name_and_version.1,
             meta_type: cnmt_type.unwrap(),
             size: self.size,
+            error: None,
         };
 
         Ok(data)
@@ -312,6 +314,19 @@ impl RomDataLoader {
             language,
             size: querier.size(),
         })
+    }
+
+    pub fn load_default(&self, error: HandlingErrors) -> RomData {
+        let name = self.path.file_name().unwrap().to_string_lossy().to_string();
+
+        RomData {
+            texture_data: None,
+            title: name,
+            version: String::from("0.0.0"),
+            meta_type: ContentMetaType::Application,
+            size: self.size,
+            error: Some(error),
+        }
     }
 
     pub fn load(&self) -> Result<RomData, HandlingErrors> {
