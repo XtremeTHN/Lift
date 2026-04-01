@@ -200,11 +200,7 @@ impl RomsPage {
         let mut hash: HashMap<String, Rom> = HashMap::new();
         self.iterate_rows(|r, _| {
             let path = r.path();
-            let Some(name) = path.file_name() else {
-                return;
-            };
-
-            hash.insert(name.to_string_lossy().to_string(), r.clone());
+            hash.insert(path.to_string_lossy().to_string(), r.clone());
         });
 
         hash

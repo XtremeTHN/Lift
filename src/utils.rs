@@ -79,10 +79,8 @@ impl FileVecBuilder {
 
     pub fn gfiles(mut self, files: Vec<gio::File>) -> Self {
         for x in files.iter() {
-            if let Some(p) = x.path()
-                && let Some(name) = p.file_name()
-            {
-                self = self.file(name.to_string_lossy().to_string());
+            if let Some(p) = x.path() {
+                self = self.file(p.to_string_lossy().to_string());
             };
         }
 
@@ -121,8 +119,8 @@ impl FileVecBuilder {
 
     pub fn build_net(self) -> Vec<u8> {
         let e = self.flatten_build();
-        let lenght = e.len() as u32;
-        let mut buf = lenght.to_be_bytes().to_vec();
+        let length = e.len() as u32;
+        let mut buf = length.to_be_bytes().to_vec();
         buf.extend_from_slice(&e);
 
         buf
