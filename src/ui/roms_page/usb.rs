@@ -7,7 +7,7 @@ use std::cell::OnceCell;
 use std::rc::Rc;
 
 mod imp {
-    use std::{cell::Cell, collections::HashMap};
+    use std::{cell::RefCell, collections::HashMap};
 
     use async_std::channel::{Receiver, bounded};
     use gtk::{gio, glib::object::ObjectExt};
@@ -23,7 +23,7 @@ mod imp {
     #[derive(Default)]
     pub struct UsbRomsPage {
         pub backend: OnceCell<Rc<Backend>>,
-        pub tasks: Cell<Option<CancellableAsyncTasks<()>>>,
+        pub tasks: RefCell<CancellableAsyncTasks<()>>,
     }
 
     #[glib::object_subclass]
@@ -129,9 +129,8 @@ mod imp {
 
             let total_size = page.total_size(&rows);
 
-            let mut tasks = CancellableAsyncTasks::<()>::new();
-
             let backend = self.backend.get().unwrap();
+            let mut tasks = self.tasks.borrow_mut();
 
             match backend.device().await {
                 Ok(mut dev) => {
@@ -171,8 +170,6 @@ mod imp {
                             imp.receive_events(receiver, page, total_size).await;
                         }
                     ));
-
-                    self.tasks.set(Some(tasks));
                 }
                 Err(e) => {
                     utils::send_error(&*obj, &format!("Couldn't open device: {}", e.to_string()));
@@ -183,10 +180,9 @@ mod imp {
         }
 
         async fn cancel_upload(&self) {
-            if let Some(t) = self.tasks.take() {
-                t.cancel_all();
-                self.obj().upcast_ref::<RomsPage>().reset_state();
-            }
+            let mut t = self.tasks.borrow_mut();
+            t.cancel_all();
+            self.obj().upcast_ref::<RomsPage>().reset_state();
         }
     }
 }

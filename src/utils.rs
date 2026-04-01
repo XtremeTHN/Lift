@@ -39,6 +39,7 @@ where
     }
 }
 
+#[derive(Default, Debug)]
 pub struct CancellableAsyncTasks<R: 'static> {
     tasks: Vec<glib::JoinHandle<R>>,
 }
@@ -52,10 +53,12 @@ impl<R: 'static> CancellableAsyncTasks<R> {
         self.tasks.push(glib::spawn_future_local(task));
     }
 
-    pub fn cancel_all(self) {
-        for task in self.tasks {
+    pub fn cancel_all(&mut self) {
+        for task in self.tasks.iter() {
             task.abort();
         }
+
+        self.tasks.clear();
     }
 }
 
