@@ -14,7 +14,7 @@ mod imp {
 
     use crate::{
         ui::rom::Rom,
-        usb::{async_protocol::UsbOperation, manager::UsbBackend},
+        usb::{async_protocol::ProtocolOperation, manager::UsbBackend},
         utils::{self, CancellableAsyncTasks},
     };
 
@@ -80,7 +80,7 @@ mod imp {
     impl UsbRomsPage {
         async fn receive_events(
             &self,
-            receiver: Receiver<UsbOperation>,
+            receiver: Receiver<ProtocolOperation>,
             page: RomsPage,
             total_size: i64,
         ) {
@@ -89,7 +89,7 @@ mod imp {
             let imp = page.imp();
             while let Ok(msg) = receiver.recv().await {
                 match msg {
-                    UsbOperation::File(name, chunk_read) => {
+                    ProtocolOperation::File(name, chunk_read) => {
                         page.set_pulse(false);
                         imp.info_label.set_label(&format!("Sending {}...", name));
 
@@ -104,11 +104,11 @@ mod imp {
                             );
                         }
                     }
-                    UsbOperation::Wait => {
+                    ProtocolOperation::Wait => {
                         imp.info_label.set_label("Waiting for command...");
                         page.set_pulse(true);
                     }
-                    UsbOperation::Exit => {
+                    ProtocolOperation::Exit => {
                         page.reset_state();
                     }
                 }

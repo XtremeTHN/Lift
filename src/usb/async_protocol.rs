@@ -53,7 +53,7 @@ struct FileHeader {
     name: String,
 }
 
-pub enum UsbOperation {
+pub enum ProtocolOperation {
     File(Arc<str>, u64),
     Exit,
     Wait,
@@ -66,7 +66,7 @@ pub enum ProtocolError {
     #[error("Command send failed: {0}")]
     DaemonSend(#[from] channel::SendError<UsbCommand>),
     #[error("Callback send failed: {0}")]
-    CallbackSend(#[from] channel::SendError<UsbOperation>),
+    CallbackSend(#[from] channel::SendError<ProtocolOperation>),
     #[error("Command recv failed: {0}")]
     Recv(#[from] channel::RecvError),
     #[error("libusb error: {0}")]
@@ -161,9 +161,9 @@ impl SwitchProtocol {
     /// Handles the commands sent by the switch
     /// Call find_switch() before using this function
     /// Send the roms before using this function
-    pub async fn poll_commands(&mut self, sender: Sender<UsbOperation>) -> ProtocolResult<()> {
+    pub async fn poll_commands(&mut self, sender: Sender<ProtocolOperation>) -> ProtocolResult<()> {
         loop {
-            let _ = sender.send(UsbOperation::Wait).await;
+            let _ = sender.send(ProtocolOperation::Wait).await;
             let header = self.read_with_timeout(0x20, 0).await?;
 
             let magic = String::from_utf8(header[0..4].to_vec())?;
@@ -175,7 +175,7 @@ impl SwitchProtocol {
             match ProtocolCommand::try_from(raw_cmd) {
                 Ok(ProtocolCommand::Exit) => {
                     info!("Exit recieved");
-                    sender.send(UsbOperation::Exit).await?;
+                    sender.send(ProtocolOperation::Exit).await?;
                     break;
                 }
                 Ok(ProtocolCommand::FileRange) => {
@@ -311,7 +311,11 @@ impl SwitchProtocol {
         Ok(())
     }
 
-    async fn send_file(&self, padded: bool, sender: &Sender<UsbOperation>) -> ProtocolResult<()> {
+    async fn send_file(
+        &self,
+        padded: bool,
+        sender: &Sender<ProtocolOperation>,
+    ) -> ProtocolResult<()> {
         let cmd = if padded {
             ProtocolCommand::FileRangePadded
         } else {
@@ -357,7 +361,7 @@ impl SwitchProtocol {
                 .await?;
 
             sender
-                .send(UsbOperation::File(name.clone(), read_size))
+                .send(ProtocolOperation::File(name.clone(), read_size))
                 .await?;
             current_offset += read_size;
         }
