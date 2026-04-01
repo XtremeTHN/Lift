@@ -54,9 +54,9 @@ struct FileHeader {
 }
 
 pub enum ProtocolOperation {
-    File(Arc<str>, u64),
+    File(String, u64),
     Exit,
-    Wait,
+    Wait(String),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -163,7 +163,11 @@ impl SwitchProtocol {
     /// Send the roms before using this function
     pub async fn poll_commands(&mut self, sender: Sender<ProtocolOperation>) -> ProtocolResult<()> {
         loop {
-            let _ = sender.send(ProtocolOperation::Wait).await;
+            let _ = sender
+                .send(ProtocolOperation::Wait(String::from(
+                    "Waiting for command...",
+                )))
+                .await;
             let header = self.read_with_timeout(0x20, 0).await?;
 
             let magic = String::from_utf8(header[0..4].to_vec())?;
@@ -343,7 +347,7 @@ impl SwitchProtocol {
 
         let data_start = if padded { PADDING_SIZE as usize } else { 0 };
 
-        let name: Arc<str> = header.name.into();
+        let name = header.name;
         while current_offset < header.range_size {
             if current_offset + read_size >= header.range_size {
                 read_size = header.range_size - current_offset;

@@ -104,8 +104,8 @@ mod imp {
                             );
                         }
                     }
-                    ProtocolOperation::Wait => {
-                        imp.info_label.set_label("Waiting for command...");
+                    ProtocolOperation::Wait(message) => {
+                        imp.info_label.set_label(&message);
                         page.set_pulse(true);
                     }
                     ProtocolOperation::Exit => {
