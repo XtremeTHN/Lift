@@ -113,8 +113,6 @@ impl RomDataLoader {
             .or_else(|| nacp.titles.first())
             .ok_or(NacpErrors::NoSuitableLanguage)?;
 
-        if title.raw_name.iter().all(|v| v == &0) {}
-
         Ok((title.name()?, nacp.version()?))
     }
 
@@ -188,11 +186,12 @@ impl RomDataLoader {
             return Err(HandlingErrors::NoNacp);
         }
 
-        if icon.is_none() && !icon_entries.is_empty() {
-            if let Some(first_icon) = icon_entries.first() {
-                let bytes = self.read_icon(&romfs, &mut romfs_stream, first_icon);
-                icon = Some(gdk::Texture::from_bytes(&bytes)?);
-            }
+        if icon.is_none()
+            && !icon_entries.is_empty()
+            && let Some(first_icon) = icon_entries.first()
+        {
+            let bytes = self.read_icon(&romfs, &mut romfs_stream, first_icon);
+            icon = Some(gdk::Texture::from_bytes(&bytes)?);
         }
 
         Ok((res.unwrap(), icon.unwrap()))
@@ -281,7 +280,7 @@ impl RomDataLoader {
         let mut file = File::open(self.path.clone())?;
 
         let pfs = PartitionFs::new_pfs0_header(&mut file)?;
-        Ok(self.find_and_handle_info(pfs, &mut file)?)
+        self.find_and_handle_info(pfs, &mut file)
     }
 
     fn handle_xci(&self) -> Result<RomData, HandlingErrors> {
@@ -291,7 +290,7 @@ impl RomDataLoader {
         let mut partition = xci.open_partition("secure".to_string(), &mut file)?;
         let pfs = xci.open_partition_fs(&mut partition)?;
 
-        Ok(self.find_and_handle_info(pfs, &mut partition)?)
+        self.find_and_handle_info(pfs, &mut partition)
     }
 
     pub fn from_gfile(
@@ -342,9 +341,9 @@ impl RomDataLoader {
 
     pub fn load(&self) -> Result<RomData, HandlingErrors> {
         if self.ext == "nsp" {
-            return self.handle_nsp();
+            self.handle_nsp()
         } else {
-            return self.handle_xci();
+            self.handle_xci()
         }
     }
 }

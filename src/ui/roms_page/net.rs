@@ -77,7 +77,7 @@ mod imp {
             page.set_info("Connecting to switch...");
 
             if let Err(e) = srv.connect_to_switch(&self.ip.borrow()).await {
-                utils::send_error(&*obj, &format!("Failed to serve: {}", e.to_string()));
+                utils::send_error(&*obj, &format!("Failed to serve: {}", e));
                 page.reset_state();
                 return None;
             };
@@ -86,7 +86,7 @@ mod imp {
 
             page.set_info("Sending roms...");
             if let Err(e) = srv.send_roms(files.0).await {
-                utils::send_error(&*obj, &format!("Failed to send roms: {}", e.to_string()));
+                utils::send_error(&*obj, &format!("Failed to send roms: {}", e));
                 page.reset_state();
                 return None;
             };
@@ -106,7 +106,7 @@ mod imp {
                 self,
                 async move {
                     if let Err(e) = rc.serve(sender).await {
-                        utils::send_error(&obj, &format!("Error while serving: {}", e.to_string()));
+                        utils::send_error(&obj, &format!("Error while serving: {}", e));
                         imp.cancel_upload().await;
                     };
                 }

@@ -116,12 +116,12 @@ impl Rom {
     }
 
     pub fn size(&self) -> i64 {
-        self.imp().size.borrow().clone()
+        *self.imp().size.borrow()
     }
 
     pub fn add_progress(&self, bytes: i64) {
         let imp = self.imp();
-        let old = imp.current_progress.borrow().clone();
+        let old = *imp.current_progress.borrow();
         let new = (bytes as f64 / *imp.size.borrow() as f64) + old;
 
         imp.current_progress.replace(new);

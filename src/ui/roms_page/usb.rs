@@ -64,7 +64,7 @@ mod imp {
                     if let Err(e) = dev.send_roms(files.0).await {
                         utils::send_error(
                             &*obj,
-                            &format!("Couldn't send roms to the switch: {}", e.to_string()),
+                            &format!("Couldn't send roms to the switch: {}", e),
                         );
 
                         return None;
@@ -82,7 +82,7 @@ mod imp {
                             if let Err(e) = dev.poll_commands(sender).await {
                                 utils::send_error(
                                     &obj,
-                                    &format!("Error while polling commands: {}", e.to_string()),
+                                    &format!("Error while polling commands: {}", e),
                                 );
                             };
                         }
@@ -97,7 +97,7 @@ mod imp {
                     ));
                 }
                 Err(e) => {
-                    utils::send_error(&*obj, &format!("Couldn't open device: {}", e.to_string()));
+                    utils::send_error(&*obj, &format!("Couldn't open device: {}", e));
                 }
             };
 

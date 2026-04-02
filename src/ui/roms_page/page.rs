@@ -175,7 +175,7 @@ mod imp {
                             Ok(Some(e)) => {
                                 utils::send_error(
                                     &*self.obj(),
-                                    &format!("Falling back to defaults: {}", e.to_string()),
+                                    &format!("Falling back to defaults: {}", e),
                                 );
                             }
                             Ok(None) => {}
@@ -327,7 +327,7 @@ impl RomsPage {
 
     pub fn add_progress(&self, bytes: i64, total_size: i64) {
         let imp = self.imp();
-        let old = imp.current_progress.borrow().clone();
+        let old = *imp.current_progress.borrow();
         let new = (bytes as f64 / total_size as f64) + old;
 
         imp.current_progress.replace(new);
@@ -344,7 +344,7 @@ impl RomsPage {
             Ok(Ok(msg)) => Some(msg),
             Ok(Err(_)) => None, // channel closed
             Err(_) => {
-                crate::utils::send_error(&*self, "Timeout");
+                crate::utils::send_error(self, "Timeout");
                 self.emit_by_name::<()>("cancel-upload", &[]);
                 None
             }
@@ -352,7 +352,7 @@ impl RomsPage {
     }
 
     async fn message(&self, receiver: &Receiver<ProtocolOperation>) -> Option<ProtocolOperation> {
-        Some(receiver.recv().await.ok()?)
+        receiver.recv().await.ok()
     }
 
     pub async fn receive_events(
@@ -387,7 +387,7 @@ impl RomsPage {
                         rom.add_progress(chunk_read as i64);
                     } else {
                         crate::utils::send_error(
-                            &*self,
+                            self,
                             &format!("Row not found for rom: {}", name),
                         );
                     }

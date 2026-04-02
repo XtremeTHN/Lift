@@ -4,7 +4,7 @@ use binrw::BinRead;
 use gtk::{
     gio::{
         self,
-        prelude::{CancellableExt, FileExt, InputStreamExt, SeekableExt},
+        prelude::{FileExt, InputStreamExt, SeekableExt},
     },
     glib,
 };
@@ -16,7 +16,6 @@ use std::io::Cursor;
 use std::os::fd::AsRawFd;
 use std::string::FromUtf8Error;
 
-use std::sync::Arc;
 
 use crate::utils::FileVecBuilder;
 

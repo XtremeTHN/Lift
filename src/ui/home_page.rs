@@ -4,7 +4,7 @@ use gtk::prelude::*;
 use std::net::IpAddr;
 
 mod imp {
-    use crate::ui::roms_page::net::NetRomsPage;
+    
 
     use super::*;
 

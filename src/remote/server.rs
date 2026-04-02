@@ -80,7 +80,7 @@ async fn handle_file(
         let header = header.to_string();
         let trimmed = header.replace("[\"bytes=", "").replace("\"]", "");
         let parts = trimmed.split("-").collect::<Vec<&str>>();
-        if parts[0] == "" {
+        if parts[0].is_empty() {
             end = parse_num(parts[1])?;
             start = size - end;
         } else {
@@ -90,7 +90,7 @@ async fn handle_file(
                 return Err(tide::Error::from_str(416, "Invalid range"));
             }
 
-            if parts[1] == "" {
+            if parts[1].is_empty() {
                 end = size - 1;
             } else {
                 end = parse_num(parts[1])?;
@@ -98,7 +98,7 @@ async fn handle_file(
         }
     }
 
-    start = start.max(0);
+    start = start;
     end = end.min(size - 1);
 
     let cnt_len = end - start + 1;
@@ -170,9 +170,9 @@ impl Server {
             let send = sender.clone();
             let cancelled = Arc::clone(&cancelled);
             async move {
-                let res = handle_file(r, send, cancelled).await;
+                
 
-                res
+                handle_file(r, send, cancelled).await
             }
         });
 

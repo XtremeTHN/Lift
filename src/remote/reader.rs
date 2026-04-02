@@ -46,7 +46,7 @@ impl async_std::io::Read for LoggedReader {
         let result = std::pin::Pin::new(&mut self.inner).poll_read(cx, buf);
         if let std::task::Poll::Ready(Ok(n)) = result {
             self.sender
-                .send_blocking(ProtocolOperation::File(self.name.clone().into(), n as u64))
+                .send_blocking(ProtocolOperation::File(self.name.clone(), n as u64))
                 .map_err(|e| {
                     log::error!("couldn't send chunk: {:?}", e);
                     std::io::Error::other(e)

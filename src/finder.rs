@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    usb::manager::{Backend, DeviceAction, UsbBackend, UsbBackendErrors},
+    usb::manager::{Backend, DeviceAction, UsbBackend},
     utils::{self, CancellableAsyncTasks},
 };
 use async_std::channel::{self, Receiver};
