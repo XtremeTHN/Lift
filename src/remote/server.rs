@@ -1,13 +1,11 @@
 use std::{io, net::IpAddr, path::PathBuf};
 
 use async_std::{
-    channel::{self, Receiver, Sender, bounded},
+    channel::Sender,
     fs::File,
     io::{BufReader, ReadExt, SeekExt, WriteExt},
     net::TcpStream,
 };
-use futures_util::FutureExt;
-use gtk::glib::JoinHandle;
 use std::io::SeekFrom;
 
 use gtk::gio;
@@ -15,7 +13,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
-use tide::{Request, Response, listener::ToListener, prelude::Listener};
+use tide::{Request, Response};
 
 // TODO: find a place for this enum
 use crate::usb::async_protocol::ProtocolOperation;
@@ -24,32 +22,19 @@ use crate::utils::FileVecBuilder;
 pub struct Server {
     switch_sock: Option<TcpStream>,
     host_ip: Option<IpAddr>,
-    server_task: Option<JoinHandle<()>>,
     server_url: Option<String>,
     cancel_flag: Arc<AtomicBool>,
-    cancel_sender: Sender<()>,
-    cancel_receiver: Receiver<()>,
 }
 
 impl Default for Server {
     fn default() -> Self {
-        let (cancel_sender, cancel_receiver) = bounded(1);
         Self {
             switch_sock: None,
             host_ip: None,
-            server_task: None,
             server_url: None,
             cancel_flag: Arc::new(AtomicBool::new(false)),
-            cancel_sender,
-            cancel_receiver,
         }
     }
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum ServeErrors {
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
 }
 
 struct LoggedReader {
@@ -91,7 +76,11 @@ impl async_std::io::Read for LoggedReader {
         let result = std::pin::Pin::new(&mut self.inner).poll_read(cx, buf);
         if let std::task::Poll::Ready(Ok(n)) = result {
             self.sender
-                .send_blocking(ProtocolOperation::File(self.name.clone().into(), n as u64));
+                .send_blocking(ProtocolOperation::File(self.name.clone().into(), n as u64))
+                .map_err(|e| {
+                    log::error!("couldn't send chunk: {:?}", e);
+                    io::Error::other(e)
+                })?;
         }
         result
     }
@@ -221,7 +210,7 @@ impl Server {
         Ok(())
     }
 
-    pub async fn serve(&mut self, sender: Sender<ProtocolOperation>) -> io::Result<()> {
+    pub async fn serve(&self, sender: Sender<ProtocolOperation>) -> io::Result<()> {
         let mut srv = tide::new();
 
         let cancelled = Arc::clone(&self.cancel_flag);
@@ -235,11 +224,7 @@ impl Server {
             }
         });
 
-        futures_util::select! {
-            _ = srv.listen(self.server_url.as_ref().unwrap()).fuse() => {},
-            _ = self.cancel_receiver.recv().fuse() => {},
-        }
-
+        srv.listen(self.server_url.as_ref().unwrap()).await?;
         Ok(())
     }
 
@@ -260,6 +245,5 @@ impl Server {
 
     pub async fn cancel(&self) {
         self.cancel_flag.store(true, Ordering::Relaxed);
-        self.cancel_sender.send(()).await.expect("failed to cancel");
     }
 }
