@@ -7,15 +7,13 @@ use std::cell::OnceCell;
 use std::rc::Rc;
 
 mod imp {
-    use std::cell::RefCell;
 
     use async_std::channel::bounded;
-    use gtk::{gio, glib::object::ObjectExt};
 
     use crate::{
         ui::roms_page::page::{FileVec, RomVec},
         usb::manager::UsbBackend,
-        utils::{self, CancellableAsyncTasks},
+        utils,
     };
 
     use super::*;
