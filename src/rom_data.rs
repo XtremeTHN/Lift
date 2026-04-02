@@ -11,6 +11,7 @@ use gtk::{
 use nxroms::formats::cnmt::PackagedContentMetaHeader;
 use nxroms::formats::nacp::{Nacp, Title, TitleLanguage};
 use nxroms::formats::nca::{ContentType, Nca, NcaErrors};
+use nxroms::formats::xci::{Xci, XciErrors};
 use nxroms::fs::pfs::PartitionFsErrors;
 use nxroms::fs::romfs::{RomFs, RomFsErrors, RomFsFileEntry};
 use nxroms::keyring::{Keyring, KeyringErrors};
@@ -60,6 +61,8 @@ pub enum HandlingErrors {
     CorruptKeyring(#[from] KeyringErrors),
     #[error("Couldn't parse rom: {0}")]
     CorruptRom(#[from] binrw::Error),
+    #[error("Couldn't parse xci: {0}")]
+    CorruptXci(#[from] XciErrors),
     #[error("PFS Error")]
     CorruptPfs(#[from] PartitionFsErrors),
     #[error("Couldn't parse romfs: {0}")]
@@ -281,7 +284,15 @@ impl RomDataLoader {
         Ok(self.find_and_handle_info(pfs, &mut file)?)
     }
 
-    fn handle_xci(&self) {}
+    fn handle_xci(&self) -> Result<RomData, HandlingErrors> {
+        let mut file = File::open(self.path.clone())?;
+
+        let mut xci = Xci::new(&mut file)?;
+        let mut partition = xci.open_partition("secure".to_string(), &mut file)?;
+        let pfs = xci.open_partition_fs(&mut partition)?;
+
+        Ok(self.find_and_handle_info(pfs, &mut partition)?)
+    }
 
     pub fn from_gfile(
         file: gio::File,
@@ -330,14 +341,10 @@ impl RomDataLoader {
     }
 
     pub fn load(&self) -> Result<RomData, HandlingErrors> {
-        // let size = self.path
-
-        // if self.ext == "nsp" {
-        return self.handle_nsp();
-        // }
-
-        // return self.handle_xci();
-
-        // return HandlingErrors::
+        if self.ext == "nsp" {
+            return self.handle_nsp();
+        } else {
+            return self.handle_xci();
+        }
     }
 }
