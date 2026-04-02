@@ -88,7 +88,11 @@ mod imp {
     impl RomsPage {
         #[template_callback]
         fn on_clear_clicked(&self, _: gtk::Button) {
-            self.list_box.remove_all();
+            if let Some(rows) = self.obj().all_rows() {
+                for x in rows {
+                    self.list_box.remove(&x);
+                }
+            }
         }
 
         #[template_callback]
