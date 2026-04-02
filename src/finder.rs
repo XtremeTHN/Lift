@@ -46,12 +46,12 @@ impl Finder {
         W: glib::object::IsA<gtk::Widget>,
     {
         let (sender, receiver) = channel::bounded(1);
-        let mut tasks = self.inner.borrow_mut();
         match Backend::new(sender).await {
             Ok(bc) => {
                 let rc_backend = Rc::new(bc);
 
                 let prot_bc = rc_backend.clone();
+                let mut tasks = self.inner.borrow_mut();
 
                 tasks.spawn_task(async move {
                     if let Err(e) = prot_bc.start().await {
