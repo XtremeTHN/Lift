@@ -42,9 +42,11 @@ home.packages = [
 ```
 
 ## TODO
-- [ ] Add support for wireless protocol
+- [x] Add support for wireless protocol
 
 ## Preview
-<img width="650" height="550" alt="switch not connected page" src="https://github.com/user-attachments/assets/e661fccd-2c34-4366-b110-3b9f9599ba68" />
-<img width="650" height="550" alt="rom selection page" src="https://github.com/user-attachments/assets/33934b4d-681e-4363-8472-57f606e40b58" />
-<img width="650" height="550" alt="rom upload" src="https://github.com/user-attachments/assets/2e8afd49-f728-42a6-9020-86fd8db52f17" />
+<img width="430" height="602" alt="Home page (usb)" src="https://github.com/user-attachments/assets/ae574f53-2a72-4485-8e94-fb280dc772b8" />
+<img width="430" height="602" alt="Home page (wireless)" src="https://github.com/user-attachments/assets/e2c4d59d-43a4-4826-822c-ec721e7123d0" />
+<img width="628" height="621" alt="Usb device permission dialog (only in flatpak) (usb portal)" src="https://github.com/user-attachments/assets/1c389b23-cbe4-4224-b4c3-213ca8cb8c5d" />
+<img width="469" height="607" alt="Rom transfer" src="https://github.com/user-attachments/assets/83bbbe5b-da26-48e8-8a3d-42886fd81724" />
+
