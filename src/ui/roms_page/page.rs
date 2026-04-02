@@ -6,7 +6,7 @@ use adw::subclass::prelude::*;
 use async_std::channel::Receiver;
 use gtk::glib::ControlFlow;
 use gtk::prelude::*;
-use gtk::{gio, glib};
+use gtk::{gdk, gio, glib};
 
 use crate::ui::rom::Rom;
 
@@ -60,6 +60,9 @@ mod imp {
         #[template_child]
         pub open_rom_btt: TemplateChild<gtk::Button>,
 
+        #[template_child]
+        pub scrolled: TemplateChild<gtk::ScrolledWindow>,
+
         pub tasks: RefCell<CancellableAsyncTasks<()>>,
 
         pub settings: OnceCell<gio::Settings>,
@@ -99,7 +102,6 @@ mod imp {
                 move |_| {
                     imp.top_button_stack.set_sensitive(false);
                     imp.clear_all_btt.set_sensitive(false);
-                    // imp
                 }
             ));
 
@@ -111,6 +113,57 @@ mod imp {
                     imp.clear_all_btt.set_sensitive(true);
                 }
             ));
+
+            let formats = gdk::ContentFormats::for_type(gdk::FileList::static_type());
+            let target = gtk::DropTarget::builder()
+                .formats(&formats)
+                .actions(gdk::DragAction::COPY)
+                .build();
+
+            target.connect_enter(|_, _x, _y| gdk::DragAction::COPY);
+            target.connect_motion(|_, _x, _y| gdk::DragAction::COPY);
+
+            target.connect_drop(glib::clone!(
+                #[weak(rename_to = imp)]
+                self,
+                #[upgrade_or]
+                false,
+                move |_, values, _, _| {
+                    match values.get::<gdk::FileList>() {
+                        Ok(list) => {
+                            for x in list.files() {
+                                let Some(path) = x.path() else {
+                                    utils::send_error(&*imp.obj(), "Couldn't get path for file");
+                                    continue;
+                                };
+
+                                let ext = path.extension().and_then(|e| e.to_str());
+                                if ext != Some("nsp") && ext != Some("xci") {
+                                    utils::send_error(
+                                        &*imp.obj(),
+                                        &format!(
+                                            "File {} is not a rom",
+                                            path.to_string_lossy().to_string()
+                                        ),
+                                    );
+                                    continue;
+                                }
+
+                                let _imp = imp.clone();
+                                glib::spawn_future_local(async move {
+                                    _imp.append_file(x).await;
+                                });
+                            }
+                        }
+                        Err(e) => {
+                            utils::send_error(&*imp.obj(), &format!("Couldn't get files: {}", e));
+                        }
+                    }
+                    true
+                }
+            ));
+
+            self.scrolled.add_controller(target);
         }
 
         fn signals() -> &'static [Signal] {
@@ -144,6 +197,29 @@ mod imp {
             }
         }
 
+        async fn append_file(&self, file: gio::File) -> bool {
+            let rom = Rom::new();
+
+            let settings = self.settings.get().unwrap();
+            let lang = settings.enum_("language");
+            let keyring_path = settings.string("keys-path");
+
+            match rom.populate(file, lang, keyring_path.to_string()).await {
+                Err(e) => {
+                    utils::send_error(&self.obj().clone(), &e.to_string());
+                    return true;
+                }
+                Ok(Some(e)) => {
+                    utils::send_error(&*self.obj(), &format!("Falling back to defaults: {}", e));
+                }
+                Ok(None) => {}
+            };
+
+            self.list_box.append(&rom);
+
+            true
+        }
+
         #[template_callback]
         async fn on_open_rom_clicked(&self, _: gtk::Button) {
             let filter = gtk::FileFilter::new();
@@ -161,29 +237,7 @@ mod imp {
             {
                 if let Ok(files) = dialog.open_multiple_future(Some(&w)).await {
                     utils::iterate_model_async(files, async move |file, _| {
-                        let rom = Rom::new();
-
-                        let settings = self.settings.get().unwrap();
-                        let lang = settings.enum_("language");
-                        let keyring_path = settings.string("keys-path");
-
-                        match rom.populate(file, lang, keyring_path.to_string()).await {
-                            Err(e) => {
-                                utils::send_error(&self.obj().clone(), &e.to_string());
-                                return true;
-                            }
-                            Ok(Some(e)) => {
-                                utils::send_error(
-                                    &*self.obj(),
-                                    &format!("Falling back to defaults: {}", e),
-                                );
-                            }
-                            Ok(None) => {}
-                        };
-
-                        self.list_box.append(&rom);
-
-                        true
+                        self.append_file(file).await
                     })
                     .await;
                 }
