@@ -6,7 +6,7 @@ use gtk::{
 }; // your base
 
 mod imp {
-    use std::{cell::RefCell, collections::HashMap};
+    use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
     use async_std::channel::{self, Receiver};
     use gtk::glib::object::{Cast, ObjectExt};
@@ -24,7 +24,7 @@ mod imp {
     pub struct NetRomsPage {
         pub ip: RefCell<String>,
         pub tasks: RefCell<CancellableAsyncTasks<()>>,
-        pub server: RefCell<Server>,
+        pub server: RefCell<Rc<Server>>,
     }
 
     #[glib::object_subclass]
@@ -87,7 +87,7 @@ mod imp {
             page: RomsPage,
             total_size: i64,
         ) {
-            let hash: std::rc::Rc<HashMap<String, Rom>> = std::rc::Rc::new(page.roms_hash());
+            let hash: HashMap<String, Rom> = page.roms_hash();
             let imp = page.imp();
 
             loop {
@@ -100,6 +100,7 @@ mod imp {
                     Ok(Ok(msg)) => msg,
                     Ok(Err(_)) => break, // channel closed
                     Err(_) => {
+                        utils::send_error(&*self.obj(), "Timeout");
                         self.cancel_upload().await;
                         break;
                     }
@@ -174,13 +175,17 @@ mod imp {
 
             page.set_cancel_visible(true);
 
+            let rc = Rc::new(srv);
+
             tasks.spawn_task(glib::clone!(
                 #[weak]
                 obj,
+                #[weak]
+                rc,
                 #[weak(rename_to = imp)]
                 self,
                 async move {
-                    if let Err(e) = srv.serve(sender).await {
+                    if let Err(e) = rc.serve(sender).await {
                         utils::send_error(&obj, &format!("Error while serving: {}", e.to_string()));
                         imp.cancel_upload().await;
                     };
@@ -196,6 +201,8 @@ mod imp {
                     imp.receive_events(receiver, page, total_size).await;
                 }
             ));
+
+            self.server.replace(rc);
 
             None
         }
