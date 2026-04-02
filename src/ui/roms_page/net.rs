@@ -1,21 +1,17 @@
 use super::page::{RomsPage, RomsPageImpl};
 use adw::subclass::prelude::*;
-use gtk::{
-    gio,
-    glib::{self, Object},
-}; // your base
+use gtk::glib::{self, Object}; // your base
 
 mod imp {
-    use std::{cell::RefCell, collections::HashMap, rc::Rc};
+    use std::{cell::RefCell, rc::Rc};
 
-    use async_std::channel::{self, Receiver};
-    use gtk::glib::object::{Cast, ObjectExt};
+    use async_std::channel;
+    use gtk::glib::object::Cast;
 
     use crate::{
         remote::server::Server,
-        ui::rom::Rom,
-        usb::async_protocol::ProtocolOperation,
-        utils::{self, CancellableAsyncTasks},
+        ui::roms_page::page::{FileVec, RomVec},
+        utils,
     };
 
     use super::*;
@@ -23,7 +19,6 @@ mod imp {
     #[derive(Default)]
     pub struct NetRomsPage {
         pub ip: RefCell<String>,
-        pub tasks: RefCell<CancellableAsyncTasks<()>>,
         pub server: RefCell<Rc<Server>>,
     }
 
@@ -39,40 +34,27 @@ mod imp {
             self.parent_constructed();
 
             let obj = self.obj();
+            let page = obj.upcast_ref::<RomsPage>();
 
-            obj.connect_local(
-                "upload-clicked",
-                true,
-                glib::clone!(
-                    #[weak(rename_to = imp)]
-                    self,
-                    #[upgrade_or]
-                    None,
-                    move |_| {
-                        glib::spawn_future_local(async move {
-                            imp.upload().await;
-                        });
-                        None
-                    }
-                ),
-            );
+            page.connect_upload_clicked(glib::clone!(
+                #[weak]
+                obj,
+                move |_, roms, files, total_size| {
+                    glib::spawn_future_local(async move {
+                        obj.imp().upload(roms, files, total_size).await;
+                    });
+                }
+            ));
 
-            obj.connect_local(
-                "cancel-clicked",
-                true,
-                glib::clone!(
-                    #[weak(rename_to = imp)]
-                    self,
-                    #[upgrade_or]
-                    None,
-                    move |_| {
-                        glib::spawn_future_local(async move {
-                            imp.cancel_upload().await;
-                        });
-                        None
-                    }
-                ),
-            );
+            page.connect_cancel_clicked(glib::clone!(
+                #[weak]
+                obj,
+                move |_| {
+                    glib::spawn_future_local(async move {
+                        obj.imp().cancel_upload().await;
+                    });
+                }
+            ));
         }
     }
 
@@ -81,101 +63,13 @@ mod imp {
     impl RomsPageImpl for NetRomsPage {}
 
     impl NetRomsPage {
-        async fn message_with_timeout(
-            &self,
-            receiver: &Receiver<ProtocolOperation>,
-            secs: u64,
-        ) -> Option<ProtocolOperation> {
-            match glib::future_with_timeout(std::time::Duration::from_secs(secs), receiver.recv())
-                .await
-            {
-                Ok(Ok(msg)) => Some(msg),
-                Ok(Err(_)) => None, // channel closed
-                Err(_) => {
-                    utils::send_error(&*self.obj(), "Timeout");
-                    self.cancel_upload().await;
-                    None
-                }
-            }
-        }
-
-        async fn message(
-            &self,
-            receiver: &Receiver<ProtocolOperation>,
-        ) -> Option<ProtocolOperation> {
-            Some(receiver.recv().await.ok()?)
-        }
-
-        async fn receive_events(
-            &self,
-            receiver: Receiver<ProtocolOperation>,
-            page: RomsPage,
-            total_size: i64,
-        ) {
-            let hash: HashMap<String, Rom> = page.roms_hash();
-            let imp = page.imp();
-
-            let mut with_timeout = false;
-
-            loop {
-                let msg = if with_timeout {
-                    self.message_with_timeout(&receiver, 5).await
-                } else {
-                    self.message(&receiver).await
-                };
-
-                match msg {
-                    Some(ProtocolOperation::File(name, chunk_read)) => {
-                        if !with_timeout {
-                            with_timeout = true
-                        };
-
-                        page.set_pulse(false);
-                        imp.info_label.set_label(&format!("Sending {}...", name));
-                        page.add_progress(chunk_read as i64, total_size);
-                        if let Some(rom) = hash.get(&*name) {
-                            rom.set_progress_visible(true);
-                            rom.add_progress(chunk_read as i64);
-                        } else {
-                            utils::send_error(
-                                &*self.obj(),
-                                &format!("Row not found for rom: {}", name),
-                            );
-                        }
-                    }
-                    Some(ProtocolOperation::Wait(message)) => {
-                        imp.info_label.set_label(&message);
-                        page.set_pulse(true);
-                    }
-                    Some(ProtocolOperation::Exit) => {
-                        page.reset_state();
-                        break;
-                    }
-                    None => {
-                        break;
-                    }
-                }
-            }
-        }
-
-        async fn upload(&self) -> Option<()> {
+        async fn upload(&self, _: RomVec, files: FileVec, total_size: i64) -> Option<()> {
             let mut srv = Server::new();
 
-            // TODO: move this to page.rs
             let obj = self.obj();
             let page = obj.upcast_ref::<RomsPage>();
 
-            // TODO: optimize this
-            // maybe use only one for loop?
-            let rows = page.all_rows()?;
-            let files = rows
-                .iter()
-                .map(|r| r.file().clone())
-                .collect::<Vec<gio::File>>();
-
-            let total_size = page.total_size(&rows);
-
-            let mut tasks = self.tasks.borrow_mut();
+            let mut tasks = page.imp().tasks.borrow_mut();
 
             page.set_no_roms(true);
             page.set_info_reveal(true);
@@ -191,7 +85,7 @@ mod imp {
             let (sender, receiver) = channel::bounded(1);
 
             page.set_info("Sending roms...");
-            if let Err(e) = srv.send_roms(files).await {
+            if let Err(e) = srv.send_roms(files.0).await {
                 utils::send_error(&*obj, &format!("Failed to send roms: {}", e.to_string()));
                 page.reset_state();
                 return None;
@@ -219,12 +113,10 @@ mod imp {
             ));
 
             tasks.spawn_task(glib::clone!(
-                #[weak(rename_to = imp)]
-                self,
                 #[weak]
                 page,
                 async move {
-                    imp.receive_events(receiver, page, total_size).await;
+                    page.receive_events(true, receiver, total_size).await;
                 }
             ));
 
@@ -233,12 +125,8 @@ mod imp {
             None
         }
 
-        // TODO: move this to page.rs
         async fn cancel_upload(&self) {
-            let mut t = self.tasks.borrow_mut();
             self.server.take().cancel().await;
-            t.cancel_all();
-            self.obj().upcast_ref::<RomsPage>().reset_state();
         }
     }
 }

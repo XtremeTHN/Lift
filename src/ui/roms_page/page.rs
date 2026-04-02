@@ -1,18 +1,29 @@
 use std::collections::HashMap;
 
+use crate::usb::async_protocol::ProtocolOperation;
+
 use adw::subclass::prelude::*;
+use async_std::channel::Receiver;
 use gtk::glib::ControlFlow;
 use gtk::prelude::*;
 use gtk::{gio, glib};
 
 use crate::ui::rom::Rom;
 
+#[derive(Clone, Debug, Default, glib::Boxed)]
+#[boxed_type(name = "RomVec")]
+pub struct RomVec(pub Vec<Rom>);
+
+#[derive(Clone, Debug, Default, glib::Boxed)]
+#[boxed_type(name = "FileVec")]
+pub struct FileVec(pub Vec<gio::File>);
+
 mod imp {
     use gtk::glib::subclass::Signal;
 
     use crate::{
         ui::{rom::Rom, window::LiftWindow},
-        utils,
+        utils::{self, CancellableAsyncTasks},
     };
 
     use std::{
@@ -48,6 +59,8 @@ mod imp {
 
         #[template_child]
         pub open_rom_btt: TemplateChild<gtk::Button>,
+
+        pub tasks: RefCell<CancellableAsyncTasks<()>>,
 
         pub settings: OnceCell<gio::Settings>,
         pub pulse_task: RefCell<Option<glib::SourceId>>,
@@ -104,7 +117,13 @@ mod imp {
             static SIGNALS: OnceLock<Vec<Signal>> = OnceLock::new();
             SIGNALS.get_or_init(|| {
                 vec![
-                    Signal::builder("upload-clicked").build(),
+                    Signal::builder("upload-clicked")
+                        .param_types([
+                            RomVec::static_type(),
+                            FileVec::static_type(),
+                            i64::static_type(),
+                        ])
+                        .build(),
                     Signal::builder("cancel-clicked").build(),
                 ]
             })
@@ -175,12 +194,32 @@ mod imp {
 
         #[template_callback]
         fn on_upload_switch_clicked(&self, _: gtk::Button) {
-            self.obj().emit_by_name::<()>("upload-clicked", &[]);
+            let Some(rows) = self.obj().all_rows() else {
+                return;
+            };
+
+            // TODO: optimize this
+            // maybe use only one for loop?
+            let roms = RomVec(rows);
+            let files = FileVec(
+                roms.0
+                    .iter()
+                    .map(|r| r.file().clone())
+                    .collect::<Vec<gio::File>>(),
+            );
+
+            let total_size = self.obj().total_size(&roms.0);
+
+            self.obj()
+                .emit_by_name::<()>("upload-clicked", &[&roms, &files, &total_size]);
         }
 
         #[template_callback]
         fn on_cancel_upload_clicked(&self, _: gtk::Button) {
+            let mut t = self.tasks.borrow_mut();
+            t.cancel_all();
             self.obj().emit_by_name::<()>("cancel-clicked", &[]);
+            self.obj().reset_state();
         }
     }
 }
@@ -218,6 +257,33 @@ impl RomsPage {
                 break;
             }
         }
+    }
+
+    pub fn connect_cancel_clicked<F>(&self, f: F) -> glib::SignalHandlerId
+    where
+        F: Fn(&Self) + 'static,
+    {
+        self.connect_closure(
+            "cancel-clicked",
+            false,
+            glib::closure_local!(move |page: RomsPage| { f(&page) }),
+        )
+    }
+
+    pub fn connect_upload_clicked<F>(&self, f: F) -> glib::SignalHandlerId
+    where
+        F: Fn(&Self, RomVec, FileVec, i64) + 'static,
+    {
+        self.connect_closure(
+            "upload-clicked",
+            false,
+            glib::closure_local!(move |page: RomsPage,
+                                       roms: RomVec,
+                                       files: FileVec,
+                                       total_size: i64| {
+                f(&page, roms, files, total_size)
+            }),
+        )
     }
 
     pub fn all_rows(&self) -> Option<Vec<Rom>> {
@@ -266,6 +332,79 @@ impl RomsPage {
 
         imp.current_progress.replace(new);
         imp.progress_bar.set_fraction(new);
+    }
+
+    async fn message_with_timeout(
+        &self,
+        receiver: &Receiver<ProtocolOperation>,
+        secs: u64,
+    ) -> Option<ProtocolOperation> {
+        match glib::future_with_timeout(std::time::Duration::from_secs(secs), receiver.recv()).await
+        {
+            Ok(Ok(msg)) => Some(msg),
+            Ok(Err(_)) => None, // channel closed
+            Err(_) => {
+                crate::utils::send_error(&*self, "Timeout");
+                self.emit_by_name::<()>("cancel-upload", &[]);
+                None
+            }
+        }
+    }
+
+    async fn message(&self, receiver: &Receiver<ProtocolOperation>) -> Option<ProtocolOperation> {
+        Some(receiver.recv().await.ok()?)
+    }
+
+    pub async fn receive_events(
+        &self,
+        file_timeout: bool,
+        receiver: Receiver<ProtocolOperation>,
+        total_size: i64,
+    ) {
+        let hash: HashMap<String, Rom> = self.roms_hash();
+        let imp = self.imp();
+
+        let mut with_timeout = false;
+
+        loop {
+            let msg = if with_timeout {
+                self.message_with_timeout(&receiver, 5).await
+            } else {
+                self.message(&receiver).await
+            };
+
+            match msg {
+                Some(ProtocolOperation::File(name, chunk_read)) => {
+                    if !with_timeout && file_timeout {
+                        with_timeout = true
+                    };
+
+                    self.set_pulse(false);
+                    imp.info_label.set_label(&format!("Sending {}...", name));
+                    self.add_progress(chunk_read as i64, total_size);
+                    if let Some(rom) = hash.get(&*name) {
+                        rom.set_progress_visible(true);
+                        rom.add_progress(chunk_read as i64);
+                    } else {
+                        crate::utils::send_error(
+                            &*self,
+                            &format!("Row not found for rom: {}", name),
+                        );
+                    }
+                }
+                Some(ProtocolOperation::Wait(message)) => {
+                    imp.info_label.set_label(&message);
+                    self.set_pulse(true);
+                }
+                Some(ProtocolOperation::Exit) => {
+                    self.reset_state();
+                    break;
+                }
+                None => {
+                    break;
+                }
+            }
+        }
     }
 
     pub fn reset_state(&self) {

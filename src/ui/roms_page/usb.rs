@@ -7,14 +7,14 @@ use std::cell::OnceCell;
 use std::rc::Rc;
 
 mod imp {
-    use std::{cell::RefCell, collections::HashMap};
+    use std::cell::RefCell;
 
-    use async_std::channel::{Receiver, bounded};
+    use async_std::channel::bounded;
     use gtk::{gio, glib::object::ObjectExt};
 
     use crate::{
-        ui::rom::Rom,
-        usb::{async_protocol::ProtocolOperation, manager::UsbBackend},
+        ui::roms_page::page::{FileVec, RomVec},
+        usb::manager::UsbBackend,
         utils::{self, CancellableAsyncTasks},
     };
 
@@ -23,7 +23,6 @@ mod imp {
     #[derive(Default)]
     pub struct UsbRomsPage {
         pub backend: OnceCell<Rc<Backend>>,
-        pub tasks: RefCell<CancellableAsyncTasks<()>>,
     }
 
     #[glib::object_subclass]
@@ -39,102 +38,32 @@ mod imp {
             self.parent_constructed();
 
             let obj = self.obj();
-            self.obj().connect_local(
-                "upload-clicked",
-                true,
-                glib::clone!(
+            obj.upcast_ref::<RomsPage>()
+                .connect_upload_clicked(glib::clone!(
                     #[weak]
                     obj,
-                    #[upgrade_or]
-                    None,
-                    move |_| {
+                    move |_, roms, files, total_size| {
                         glib::spawn_future_local(async move {
-                            obj.imp().upload().await;
+                            obj.imp().upload(roms, files, total_size).await;
                         });
-                        None
                     }
-                ),
-            );
-
-            self.obj().connect_local(
-                "cancel-clicked",
-                true,
-                glib::clone!(
-                    #[weak]
-                    obj,
-                    #[upgrade_or]
-                    None,
-                    move |_| {
-                        glib::spawn_future_local(async move {
-                            obj.imp().cancel_upload().await;
-                        });
-                        None
-                    }
-                ),
-            );
+                ));
         }
     }
     impl WidgetImpl for UsbRomsPage {}
     impl NavigationPageImpl for UsbRomsPage {}
 
     impl UsbRomsPage {
-        async fn receive_events(
-            &self,
-            receiver: Receiver<ProtocolOperation>,
-            page: RomsPage,
-            total_size: i64,
-        ) {
-            let hash: HashMap<String, Rom> = page.roms_hash();
-
-            let imp = page.imp();
-            while let Ok(msg) = receiver.recv().await {
-                match msg {
-                    ProtocolOperation::File(name, chunk_read) => {
-                        page.set_pulse(false);
-                        imp.info_label.set_label(&format!("Sending {}...", name));
-
-                        page.add_progress(chunk_read as i64, total_size);
-                        if let Some(rom) = hash.get(&*name) {
-                            rom.set_progress_visible(true);
-                            rom.add_progress(chunk_read as i64);
-                        } else {
-                            utils::send_error(
-                                &*self.obj(),
-                                &format!("Row not found for rom: {}", name),
-                            );
-                        }
-                    }
-                    ProtocolOperation::Wait(message) => {
-                        imp.info_label.set_label(&message);
-                        page.set_pulse(true);
-                    }
-                    ProtocolOperation::Exit => {
-                        page.reset_state();
-                    }
-                }
-            }
-        }
-
-        async fn upload(&self) -> Option<()> {
+        async fn upload(&self, _: RomVec, files: FileVec, total_size: i64) -> Option<()> {
             let obj = self.obj();
             let page = obj.upcast_ref::<RomsPage>();
 
-            // TODO: optimize this
-            // maybe use only one for loop?
-            let rows = page.all_rows()?;
-            let files = rows
-                .iter()
-                .map(|r| r.file().clone())
-                .collect::<Vec<gio::File>>();
-
-            let total_size = page.total_size(&rows);
-
             let backend = self.backend.get().unwrap();
-            let mut tasks = self.tasks.borrow_mut();
+            let mut tasks = page.imp().tasks.borrow_mut();
 
             match backend.device().await {
                 Ok(mut dev) => {
-                    if let Err(e) = dev.send_roms(files).await {
+                    if let Err(e) = dev.send_roms(files.0).await {
                         utils::send_error(
                             &*obj,
                             &format!("Couldn't send roms to the switch: {}", e.to_string()),
@@ -162,12 +91,10 @@ mod imp {
                     ));
 
                     tasks.spawn_task(glib::clone!(
-                        #[weak(rename_to = imp)]
-                        self,
                         #[weak]
                         page,
                         async move {
-                            imp.receive_events(receiver, page, total_size).await;
+                            page.receive_events(false, receiver, total_size).await;
                         }
                     ));
                 }
@@ -177,12 +104,6 @@ mod imp {
             };
 
             Some(())
-        }
-
-        async fn cancel_upload(&self) {
-            let mut t = self.tasks.borrow_mut();
-            t.cancel_all();
-            self.obj().upcast_ref::<RomsPage>().reset_state();
         }
     }
 }
