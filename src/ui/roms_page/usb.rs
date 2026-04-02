@@ -57,7 +57,6 @@ mod imp {
             let page = obj.upcast_ref::<RomsPage>();
 
             let backend = self.backend.get().unwrap();
-            let mut tasks = page.imp().tasks.borrow_mut();
 
             match backend.device().await {
                 Ok(mut dev) => {
@@ -74,6 +73,7 @@ mod imp {
                     page.set_cancel_visible(true);
 
                     let (sender, receiver) = bounded(1);
+                    let mut tasks = page.imp().tasks.borrow_mut();
 
                     tasks.spawn_task(glib::clone!(
                         #[weak]
