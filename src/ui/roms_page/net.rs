@@ -69,14 +69,16 @@ mod imp {
             let obj = self.obj();
             let page = obj.upcast_ref::<RomsPage>();
 
-            let mut tasks = page.imp().tasks.borrow_mut();
-
             page.set_no_roms(true);
             page.set_info_reveal(true);
             page.set_pulse(true);
             page.set_info("Connecting to switch...");
 
-            if let Err(e) = srv.connect_to_switch(&self.ip.borrow()).await {
+            let ip = {
+                let i = self.ip.borrow();
+                i.clone()
+            };
+            if let Err(e) = srv.connect_to_switch(&ip).await {
                 utils::send_error(&*obj, &format!("Failed to serve: {}", e));
                 page.reset_state();
                 return None;
@@ -96,6 +98,7 @@ mod imp {
             page.set_cancel_visible(true);
 
             let rc = Rc::new(srv);
+            let mut tasks = page.imp().tasks.borrow_mut();
 
             tasks.spawn_task(glib::clone!(
                 #[weak]
