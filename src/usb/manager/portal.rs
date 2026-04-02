@@ -7,10 +7,7 @@ use ashpd::{
 };
 use async_std::channel::Sender;
 use futures_util::StreamExt;
-use std::{
-    cell::{OnceCell, RefCell},
-    os::fd::AsRawFd,
-};
+use std::cell::{OnceCell, RefCell};
 
 pub struct PortalBackend {
     proxy: UsbProxy,
@@ -27,9 +24,7 @@ pub enum PortalBackendErrors {
 
 impl PortalBackend {
     pub async fn new(sender: Sender<DeviceAction>) -> Result<Self, UsbBackendErrors> {
-        let proxy = UsbProxy::new()
-            .await
-            .map_err(|e| PortalBackendErrors::from(e))?;
+        let proxy = UsbProxy::new().await.map_err(PortalBackendErrors::from)?;
 
         Ok(Self {
             proxy,
@@ -47,7 +42,7 @@ impl UsbBackend for PortalBackend {
             .proxy
             .receive_device_events()
             .await
-            .map_err(|e| PortalBackendErrors::from(e))?;
+            .map_err(PortalBackendErrors::from)?;
 
         while let Some(event) = stream.next().await {
             let events = event.events();
@@ -119,9 +114,10 @@ impl UsbBackend for PortalBackend {
         let fd = match dev_tuple.1 {
             Ok(fd) => fd,
             Err(e) => {
-                return Err(UsbBackendErrors::Error(
-                    "Couldn't acquire device.".to_string(),
-                ));
+                return Err(UsbBackendErrors::Error(format!(
+                    "Couldn't acquire device: {}",
+                    e
+                )));
             }
         };
 
