@@ -1,16 +1,20 @@
-use gtk::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::glib;
+use gtk::prelude::*;
 use std::net::IpAddr;
 
 mod imp {
+    use crate::ui::roms_page::net::NetRomsPage;
+
     use super::*;
 
     #[derive(Debug, Default, gtk::CompositeTemplate)]
     #[template(resource = "/com/github/XtremeTHN/Lift/home_page.ui")]
     pub struct HomePage {
         #[template_child]
-        pub net_confirm_btt: TemplateChild<gtk::Button>
+        pub net_confirm_btt: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub ip_row: TemplateChild<adw::EntryRow>,
     }
 
     #[glib::object_subclass]
@@ -65,9 +69,11 @@ mod imp {
                 return;
             }
 
+            let ip = self.ip_row.text();
+
             let _ = self
                 .obj()
-                .activate_action("navigation.push", Some("roms-page".to_variant().as_ref()));
+                .activate_action("win.show-net", Some(&ip.to_variant()));
         }
     }
 }

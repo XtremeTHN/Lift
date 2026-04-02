@@ -159,7 +159,7 @@ impl Rom {
         file: gio::File,
         language: i32,
         keyring_path: String,
-    ) -> Result<(), RomErrors> {
+    ) -> Result<Option<HandlingErrors>, RomErrors> {
         self.imp()
             .file
             .set(file.clone())
@@ -168,58 +168,54 @@ impl Rom {
         let lang = TitleLanguage::try_from(language).expect("language not in range");
         let data = gio::spawn_blocking(move || -> Result<RomData, RomErrors> {
             let loader = RomDataLoader::from_gfile(file, lang, keyring_path)?;
-            Ok(loader.load()?)
+            let data = loader.load().unwrap_or_else(|e| loader.load_default(e));
+            Ok(data)
         })
-        .await;
+        .await
+        .map_err(|_| RomErrors::GioThread)
+        .flatten()?;
 
-        match data {
-            Ok(res) => {
-                let data = res?;
-                let imp = self.imp();
+        let imp = self.imp();
 
-                if let Some(data) = data.texture_data {
-                    imp.icon.set_paintable(Some(&data));
-                } else {
-                    let img = gtk::Image::builder()
-                        .icon_name("image-missing-symbolic")
-                        .pixel_size(60)
-                        .build();
-                    imp.frame.set_child(Some(&img));
-                }
-
-                imp.size.replace(data.size);
-
-                imp.rom_title.set_label(&data.title);
-                imp.rom_version
-                    .set_label(&format!("Version: {}", data.version));
-
-                let fmt_size = glib::format_size(data.size.clamp(0, i64::MAX) as u64);
-                imp.rom_size.set_label(&format!("Size: {}", fmt_size));
-
-                match data.meta_type {
-                    ContentMetaType::Patch => {
-                        imp.rom_type_icon
-                            .set_icon_name(Some("software-update-available"));
-                        imp.rom_type_icon.set_visible(true);
-                    }
-                    ContentMetaType::AddOnContent => {
-                        imp.rom_type_icon
-                            .set_icon_name(Some("application-x-addon-symbolic"));
-                        imp.rom_type_icon.set_visible(true);
-                    }
-                    ContentMetaType::Application => {}
-                    _ => {
-                        utils::send_error(
-                            self,
-                            &format!("Unknown content meta type: {:?}", data.meta_type),
-                        );
-                    }
-                }
-            }
-
-            Err(_) => return Err(RomErrors::GioThread),
+        if let Some(data) = data.texture_data {
+            imp.icon.set_paintable(Some(&data));
+        } else {
+            let img = gtk::Image::builder()
+                .icon_name("image-missing-symbolic")
+                .pixel_size(60)
+                .build();
+            imp.frame.set_child(Some(&img));
         }
 
-        Ok(())
+        imp.size.replace(data.size);
+
+        imp.rom_title.set_label(&data.title);
+        imp.rom_version
+            .set_label(&format!("Version: {}", data.version));
+
+        let fmt_size = glib::format_size(data.size.clamp(0, i64::MAX) as u64);
+        imp.rom_size.set_label(&format!("Size: {}", fmt_size));
+
+        match data.meta_type {
+            ContentMetaType::Patch => {
+                imp.rom_type_icon
+                    .set_icon_name(Some("software-update-available"));
+                imp.rom_type_icon.set_visible(true);
+            }
+            ContentMetaType::AddOnContent => {
+                imp.rom_type_icon
+                    .set_icon_name(Some("application-x-addon-symbolic"));
+                imp.rom_type_icon.set_visible(true);
+            }
+            ContentMetaType::Application => {}
+            _ => {
+                utils::send_error(
+                    self,
+                    &format!("Unknown content meta type: {:?}", data.meta_type),
+                );
+            }
+        }
+
+        Ok(data.error)
     }
 }

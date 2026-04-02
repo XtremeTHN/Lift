@@ -1,6 +1,7 @@
 mod application;
 mod config;
 mod finder;
+mod remote;
 mod rom_data;
 mod ui;
 mod usb;

@@ -12,7 +12,7 @@ mod imp {
     use adw::prelude::AdwDialogExt;
     use gtk::glib::VariantTy;
 
-    use crate::finder::Finder;
+    use crate::{finder::Finder, ui::roms_page::net::NetRomsPage};
 
     use super::*;
 
@@ -44,6 +44,12 @@ mod imp {
 
             klass.install_action("win.stop-finder", None, |win, _, _| {
                 win.imp().finder.stop();
+            });
+
+            klass.install_action("win.show-net", Some(VariantTy::STRING), |win, _, arg| {
+                let ip = arg.unwrap().str().unwrap();
+                let net = NetRomsPage::new(ip);
+                win.imp().navigation.push(&net);
             });
 
             klass.install_action("win.settings", None, |win, _, _| {

@@ -23,3 +23,5 @@ adw = { version = "0.9.1", package = "libadwaita", features = ["v1_6"] }
 futures-util = "0.3.32"
 nxroms = { git = "https://github.com/XtremeTHN/RustNXRoms", features = ["glib"] }
 positioned-io = "0.3.5"
+tide = "0.16.0"
+chrono = "0.4.44"

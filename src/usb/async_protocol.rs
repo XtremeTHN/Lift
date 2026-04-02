@@ -53,6 +53,7 @@ struct FileHeader {
     name: String,
 }
 
+#[derive(Debug)]
 pub enum ProtocolOperation {
     File(String, u64),
     Exit,
