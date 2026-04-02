@@ -9,7 +9,7 @@ template $RomsPage: Adw.NavigationPage {
         [top]
         Adw.HeaderBar {
             [end]
-            Button {
+            Button clear_all_btt {
                 icon-name: "user-trash-symbolic";
                 tooltip-text: _("Clear all");
 
@@ -17,7 +17,7 @@ template $RomsPage: Adw.NavigationPage {
             }
 
             [end]
-            Button {
+            Button open_rom_btt {
                 icon-name: "plus-large-symbolic";
                 tooltip-text: _("Add rom");
 
@@ -49,7 +49,7 @@ template $RomsPage: Adw.NavigationPage {
             }
 
             Stack top_button_stack {
-                sensitive: true;
+                sensitive: false;
                 StackPage {
                     name: "upload";
 
@@ -84,7 +84,7 @@ template $RomsPage: Adw.NavigationPage {
                     selection-mode: none;
 
                     [placeholder]
-                    Adw.StatusPage {
+                    Adw.StatusPage placeholder {
                         icon-name: "nintendo-controller-symbolic";
                         title: _("No rooms");
                         description: _("Add roms through the plus button above. Only .nsp or .xci roms are allowed.");

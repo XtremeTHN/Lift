@@ -40,9 +40,20 @@ mod imp {
         #[template_child]
         pub top_button_stack: TemplateChild<gtk::Stack>,
 
+        #[template_child]
+        pub placeholder: TemplateChild<adw::StatusPage>,
+
+        #[template_child]
+        pub clear_all_btt: TemplateChild<gtk::Button>,
+
+        #[template_child]
+        pub open_rom_btt: TemplateChild<gtk::Button>,
+
         pub settings: OnceCell<gio::Settings>,
         pub pulse_task: RefCell<Option<glib::SourceId>>,
         pub current_progress: RefCell<f64>,
+
+        pub binding: OnceCell<glib::Binding>,
     }
 
     #[glib::object_subclass]
@@ -68,6 +79,25 @@ mod imp {
 
             let settings = gio::Settings::new("com.github.XtremeTHN.Lift");
             let _ = self.settings.set(settings);
+
+            self.placeholder.connect_map(glib::clone!(
+                #[weak(rename_to = imp)]
+                self,
+                move |_| {
+                    imp.top_button_stack.set_sensitive(false);
+                    imp.clear_all_btt.set_sensitive(false);
+                    // imp
+                }
+            ));
+
+            self.placeholder.connect_unmap(glib::clone!(
+                #[weak(rename_to = imp)]
+                self,
+                move |_| {
+                    imp.top_button_stack.set_sensitive(true);
+                    imp.clear_all_btt.set_sensitive(true);
+                }
+            ));
         }
 
         fn signals() -> &'static [Signal] {
@@ -247,10 +277,15 @@ impl RomsPage {
         self.set_pulse(false);
         self.set_cancel_visible(false);
         self.set_info_reveal(false);
+        self.set_no_roms(false);
 
         self.iterate_rows(|r, _| {
             r.reset_state();
         });
+    }
+
+    pub fn set_no_roms(&self, no_roms: bool) {
+        self.imp().open_rom_btt.set_sensitive(!no_roms);
     }
 
     pub fn set_info(&self, msg: &str) {
