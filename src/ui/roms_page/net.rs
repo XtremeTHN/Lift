@@ -81,6 +81,31 @@ mod imp {
     impl RomsPageImpl for NetRomsPage {}
 
     impl NetRomsPage {
+        async fn message_with_timeout(
+            &self,
+            receiver: &Receiver<ProtocolOperation>,
+            secs: u64,
+        ) -> Option<ProtocolOperation> {
+            match glib::future_with_timeout(std::time::Duration::from_secs(secs), receiver.recv())
+                .await
+            {
+                Ok(Ok(msg)) => Some(msg),
+                Ok(Err(_)) => None, // channel closed
+                Err(_) => {
+                    utils::send_error(&*self.obj(), "Timeout");
+                    self.cancel_upload().await;
+                    None
+                }
+            }
+        }
+
+        async fn message(
+            &self,
+            receiver: &Receiver<ProtocolOperation>,
+        ) -> Option<ProtocolOperation> {
+            Some(receiver.recv().await.ok()?)
+        }
+
         async fn receive_events(
             &self,
             receiver: Receiver<ProtocolOperation>,
@@ -90,24 +115,21 @@ mod imp {
             let hash: HashMap<String, Rom> = page.roms_hash();
             let imp = page.imp();
 
+            let mut with_timeout = false;
+
             loop {
-                let msg = match glib::future_with_timeout(
-                    std::time::Duration::from_secs(5),
-                    receiver.recv(),
-                )
-                .await
-                {
-                    Ok(Ok(msg)) => msg,
-                    Ok(Err(_)) => break, // channel closed
-                    Err(_) => {
-                        utils::send_error(&*self.obj(), "Timeout");
-                        self.cancel_upload().await;
-                        break;
-                    }
+                let msg = if with_timeout {
+                    self.message_with_timeout(&receiver, 5).await
+                } else {
+                    self.message(&receiver).await
                 };
 
                 match msg {
-                    ProtocolOperation::File(name, chunk_read) => {
+                    Some(ProtocolOperation::File(name, chunk_read)) => {
+                        if !with_timeout {
+                            with_timeout = true
+                        };
+
                         page.set_pulse(false);
                         imp.info_label.set_label(&format!("Sending {}...", name));
                         page.add_progress(chunk_read as i64, total_size);
@@ -121,12 +143,15 @@ mod imp {
                             );
                         }
                     }
-                    ProtocolOperation::Wait(message) => {
+                    Some(ProtocolOperation::Wait(message)) => {
                         imp.info_label.set_label(&message);
                         page.set_pulse(true);
                     }
-                    ProtocolOperation::Exit => {
+                    Some(ProtocolOperation::Exit) => {
                         page.reset_state();
+                        break;
+                    }
+                    None => {
                         break;
                     }
                 }
@@ -152,6 +177,7 @@ mod imp {
 
             let mut tasks = self.tasks.borrow_mut();
 
+            page.set_no_roms(true);
             page.set_info_reveal(true);
             page.set_pulse(true);
             page.set_info("Connecting to switch...");
