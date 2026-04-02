@@ -86,12 +86,6 @@ fn matches_extension(file: String, extension: &str) -> bool {
     ext == Some(&extension)
 }
 
-#[derive(Debug)]
-pub enum RomType {
-    Xci,
-    Nsp,
-}
-
 pub struct RomDataLoader {
     path: PathBuf,
     ext: String,
@@ -121,13 +115,13 @@ impl RomDataLoader {
         romfs: &RomFs,
         romfs_stream: &mut S,
         entry: &RomFsFileEntry,
-    ) -> glib::Bytes {
+    ) -> std::io::Result<glib::Bytes> {
         let mut icon_stream = romfs.open_file(entry, romfs_stream);
         let mut icon_buffer = vec![0u8; entry.size as usize];
 
-        icon_stream.read_exact(&mut icon_buffer);
+        icon_stream.read_exact(&mut icon_buffer)?;
 
-        glib::Bytes::from(&icon_buffer)
+        Ok(glib::Bytes::from(&icon_buffer))
     }
 
     fn handle_control_nca<S: Read + Seek + positioned_io::ReadAt>(
@@ -170,7 +164,7 @@ impl RomDataLoader {
                             && &self.language.to_string() == lang
                         {
                             let bytes = self.read_icon(&romfs, &mut romfs_stream, entry);
-                            icon = Some(gdk::Texture::from_bytes(&bytes)?);
+                            icon = Some(gdk::Texture::from_bytes(&bytes?)?);
                         }
                     }
                 }
@@ -191,7 +185,7 @@ impl RomDataLoader {
             && let Some(first_icon) = icon_entries.first()
         {
             let bytes = self.read_icon(&romfs, &mut romfs_stream, first_icon);
-            icon = Some(gdk::Texture::from_bytes(&bytes)?);
+            icon = Some(gdk::Texture::from_bytes(&bytes?)?);
         }
 
         Ok((res.unwrap(), icon.unwrap()))
