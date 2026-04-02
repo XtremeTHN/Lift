@@ -98,7 +98,6 @@ async fn handle_file(
         }
     }
 
-    start = start;
     end = end.min(size - 1);
 
     let cnt_len = end - start + 1;
@@ -169,11 +168,7 @@ impl Server {
         srv.at("/file/*filepath").get(move |r| {
             let send = sender.clone();
             let cancelled = Arc::clone(&cancelled);
-            async move {
-                
-
-                handle_file(r, send, cancelled).await
-            }
+            async move { handle_file(r, send, cancelled).await }
         });
 
         srv.listen(self.server_url.as_ref().unwrap()).await?;
