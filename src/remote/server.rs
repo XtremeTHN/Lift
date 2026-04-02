@@ -8,6 +8,7 @@ use async_std::{
 };
 use std::io::SeekFrom;
 
+use super::reader::LoggedReader;
 use gtk::gio;
 use std::sync::{
     Arc,
@@ -18,73 +19,6 @@ use tide::{Request, Response};
 // TODO: find a place for this enum
 use crate::usb::async_protocol::ProtocolOperation;
 use crate::utils::FileVecBuilder;
-
-pub struct Server {
-    switch_sock: Option<TcpStream>,
-    host_ip: Option<IpAddr>,
-    server_url: Option<String>,
-    cancel_flag: Arc<AtomicBool>,
-}
-
-impl Default for Server {
-    fn default() -> Self {
-        Self {
-            switch_sock: None,
-            host_ip: None,
-            server_url: None,
-            cancel_flag: Arc::new(AtomicBool::new(false)),
-        }
-    }
-}
-
-struct LoggedReader {
-    inner: async_std::io::Take<File>,
-    name: String,
-    sender: Sender<ProtocolOperation>,
-    cancelled: Arc<AtomicBool>,
-}
-
-impl LoggedReader {
-    fn new(
-        inner: async_std::io::Take<File>,
-        name: String,
-        sender: Sender<ProtocolOperation>,
-        cancelled: Arc<AtomicBool>,
-    ) -> Self {
-        Self {
-            inner,
-            name,
-            sender,
-            cancelled,
-        }
-    }
-}
-
-impl async_std::io::Read for LoggedReader {
-    fn poll_read(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut [u8],
-    ) -> std::task::Poll<std::io::Result<usize>> {
-        if self.cancelled.load(Ordering::Relaxed) {
-            return std::task::Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::Interrupted,
-                "cancelled",
-            )));
-        }
-
-        let result = std::pin::Pin::new(&mut self.inner).poll_read(cx, buf);
-        if let std::task::Poll::Ready(Ok(n)) = result {
-            self.sender
-                .send_blocking(ProtocolOperation::File(self.name.clone().into(), n as u64))
-                .map_err(|e| {
-                    log::error!("couldn't send chunk: {:?}", e);
-                    io::Error::other(e)
-                })?;
-        }
-        result
-    }
-}
 
 fn parse_num(num: &str) -> Result<u64, tide::Error> {
     let res: u64 = match num.parse() {
@@ -192,6 +126,24 @@ async fn handle_file(
     }
 
     Ok(res)
+}
+
+pub struct Server {
+    switch_sock: Option<TcpStream>,
+    host_ip: Option<IpAddr>,
+    server_url: Option<String>,
+    cancel_flag: Arc<AtomicBool>,
+}
+
+impl Default for Server {
+    fn default() -> Self {
+        Self {
+            switch_sock: None,
+            host_ip: None,
+            server_url: None,
+            cancel_flag: Arc::new(AtomicBool::new(false)),
+        }
+    }
 }
 
 impl Server {
