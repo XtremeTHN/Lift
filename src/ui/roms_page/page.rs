@@ -321,7 +321,7 @@ impl RomsPage {
         rom
     }
 
-    pub fn total_size(&self, rows: &Vec<Rom>) -> i64 {
+    pub fn total_size(&self, rows: &[Rom]) -> i64 {
         rows.iter().map(|r| r.size()).sum()
     }
 
@@ -386,10 +386,7 @@ impl RomsPage {
                         rom.set_progress_visible(true);
                         rom.add_progress(chunk_read as i64);
                     } else {
-                        crate::utils::send_error(
-                            self,
-                            &format!("Row not found for rom: {}", name),
-                        );
+                        crate::utils::send_error(self, &format!("Row not found for rom: {}", name));
                     }
                 }
                 Some(ProtocolOperation::Wait(message)) => {
