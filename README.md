@@ -12,12 +12,14 @@ flatpak install --user com.github.XtremeTHN.Lift.flatpak
 ```
 Done
 
-### Meson
+### General
 #### Dependencies
 - libusb
 - gtk4
 - libadwaita
 - libgudev
+
+Just use meson:
 
 ```
 meson setup build
@@ -29,7 +31,7 @@ Add this repository to your flake inputs
 ```nix
 # flake.nix
 inputs.lift = {
-  url = "github:XtremeTHN/Lift;
+  url = "github:XtremeTHN/Lift";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
