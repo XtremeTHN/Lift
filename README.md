@@ -14,12 +14,12 @@ Done
 
 ### General
 #### Dependencies
-- libusb
-- gtk4
-- libadwaita
-- libgudev
+- `libusb`
+- `gtk4`
+- `libadwaita`
+- `libgudev`
 
-Just use meson:
+Use meson:
 
 ```
 meson setup build
