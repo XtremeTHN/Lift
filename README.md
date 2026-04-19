@@ -6,10 +6,18 @@ A [nxloader](https://github.com/XtremeTHN/NXLoader) rust port. This port should 
 ~~Currently only flatpak is supported, cuz this program uses desktop portals to access the switch usb.<br>~~
 
 ### Flatpak
-Download the flatpak file in the releases or build it yourself with gnome builder, and then execute this:
+
+#### Prebuilt
+Download the flatpak file in the releases and run this
 ```
 flatpak install --user com.github.XtremeTHN.Lift.flatpak
 ```
+#### Manual Building
+Run
+```
+flatpak-builder --install-deps-from=flathub --user --install --force-clean build-dir com.github.XtremeTHN.Lift.json
+```
+
 Done
 
 ### General
