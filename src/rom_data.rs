@@ -11,14 +11,13 @@ use gtk::{
 use nxroms::formats::cnmt::PackagedContentMetaHeader;
 use nxroms::formats::nacp::{Nacp, Title, TitleLanguage};
 use nxroms::formats::nca::{ContentType, Nca, NcaErrors};
-use nxroms::formats::xci::{Xci, XciErrors};
+use nxroms::formats::xci::{Xci, XciErrors, XciPartition};
 use nxroms::fs::pfs::PartitionFsErrors;
 use nxroms::fs::romfs::{RomFs, RomFsErrors, RomFsFileEntry};
 use nxroms::keyring::{Keyring, KeyringErrors};
 use nxroms::{
     formats::cnmt::ContentMetaType,
     fs::pfs::{PFSHeader, PartitionFs},
-    // readers::
 };
 
 use binrw::BinRead;
@@ -79,7 +78,7 @@ pub enum HandlingErrors {
     NoCnmt,
 }
 
-fn matches_extension(file: String, extension: &str) -> bool {
+fn matches_extension(file: &String, extension: &str) -> bool {
     let parts = file.split(".").collect::<Vec<&str>>();
     let ext = parts.last();
 
@@ -135,19 +134,19 @@ impl RomDataLoader {
 
         let mut res: Option<(String, String)> = None;
         let mut icon: Option<gdk::Texture> = None;
-        let mut icon_entries: Vec<&RomFsFileEntry> = vec![];
+        let mut icon_entries: Vec<RomFsFileEntry> = vec![];
 
-        for (index, entry) in romfs.files.iter().enumerate() {
-            match romfs.get_name_for_entry(entry) {
+        for (index, entry) in romfs.files().enumerate() {
+            let entry = entry?;
+
+            match entry.name() {
                 Ok(name) => {
-                    if matches_extension(name.clone(), "nacp") {
-                        let mut nacp_stream = romfs.open_file(entry, &mut romfs_stream);
+                    if matches_extension(&name, "nacp") {
+                        let mut nacp_stream = romfs.open_file(&entry, &mut romfs_stream);
                         let nacp = Nacp::read(&mut nacp_stream)?;
 
                         res = Some(self.handle_nacp(nacp)?);
-                    } else if matches_extension(name.clone(), "dat") {
-                        icon_entries.push(entry);
-
+                    } else if matches_extension(&name, "dat") {
                         // try to find the icon corresponding to the language set
                         // in the constructor.
                         // the file is named smth like this: icon_AmericanEnglish.dat
@@ -163,9 +162,11 @@ impl RomDataLoader {
                         if let Some(lang) = parts.last()
                             && &self.language.to_string() == lang
                         {
-                            let bytes = self.read_icon(&romfs, &mut romfs_stream, entry);
+                            let bytes = self.read_icon(&romfs, &mut romfs_stream, &entry);
                             icon = Some(gdk::Texture::from_bytes(&bytes?)?);
                         }
+
+                        icon_entries.push(entry);
                     }
                 }
                 Err(e) => log::warn!(
@@ -197,7 +198,7 @@ impl RomDataLoader {
         stream: &mut S,
     ) -> Result<ContentMetaType, HandlingErrors> {
         let mut fs = nca.open_fs(0, stream)?;
-        let pfs = PartitionFs::new_pfs0_header(&mut fs)?;
+        let pfs = PartitionFs::new_pfs0(&mut fs)?;
 
         for entry in pfs.header.entry_table.iter() {
             let name = pfs.get_name_for_entry(entry).expect("couldn't get");
@@ -236,7 +237,7 @@ impl RomDataLoader {
         for entry in pfs.header.entry_table() {
             let name = pfs.get_name_for_entry(entry)?;
 
-            if !matches_extension(name, "nca") {
+            if !matches_extension(&name, "nca") {
                 continue;
             }
 
@@ -273,7 +274,7 @@ impl RomDataLoader {
     fn handle_nsp(&self) -> Result<RomData, HandlingErrors> {
         let mut file = File::open(self.path.clone())?;
 
-        let pfs = PartitionFs::new_pfs0_header(&mut file)?;
+        let pfs = PartitionFs::new_pfs0(&mut file)?;
         self.find_and_handle_info(pfs, &mut file)
     }
 
@@ -281,7 +282,7 @@ impl RomDataLoader {
         let mut file = File::open(self.path.clone())?;
 
         let mut xci = Xci::new(&mut file)?;
-        let mut partition = xci.open_partition("secure".to_string(), &mut file)?;
+        let mut partition = xci.open_partition(XciPartition::Secure, &mut file)?;
         let pfs = xci.open_partition_fs(&mut partition)?;
 
         self.find_and_handle_info(pfs, &mut partition)
